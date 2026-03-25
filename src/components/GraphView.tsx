@@ -58,26 +58,38 @@ export default function GraphView() {
 		[],
 	);
 
+	const visiblePeople = useMemo(() => {
+		if (activeYear === "all") return people;
+		return people.filter((person) => person.year === activeYear);
+	}, [people, activeYear]);
+
 	const allEventOptions = useMemo(() => {
-		return buildEventOptions(savedEvents, people);
-	}, [savedEvents, people]);
+		return buildEventOptions(savedEvents, visiblePeople);
+	}, [savedEvents, visiblePeople]);
 
 	const graphData = useMemo(() => {
-		return buildGraphData(people, relationships, tags, savedEvents, {
+		return buildGraphData(visiblePeople, relationships, tags, savedEvents, {
 			filterEventKey,
 			filterTagId,
 		});
-	}, [people, relationships, tags, savedEvents, filterEventKey, filterTagId]);
+	}, [
+		visiblePeople,
+		relationships,
+		tags,
+		savedEvents,
+		filterEventKey,
+		filterTagId,
+	]);
 
 	const nodeOptions = useMemo(
 		() =>
-			people
+			visiblePeople
 				.map((person) => ({
 					id: person.id,
 					label: String(person.name ?? "").trim() || "Unknown",
 				}))
 				.sort((a, b) => a.label.localeCompare(b.label)),
-		[people],
+		[visiblePeople],
 	);
 
 	const yearOptions = useMemo(() => {

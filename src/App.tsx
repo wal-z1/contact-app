@@ -167,6 +167,11 @@ export default function App() {
 
 	return (
 		<div className="min-h-screen w-full bg-(--bg) text-(--text-h)">
+			<a
+				href="#relationship-map-canvas"
+				className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-80 focus:rounded-md focus:border focus:border-(--accent-border) focus:bg-slate-900 focus:px-3 focus:py-2 focus:text-xs focus:text-slate-100">
+				Skip to relationship graph
+			</a>
 			<div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(var(--accent-rgb),0.22),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(var(--accent-rgb),0.14),transparent_45%)]" />
 			<div
 				ref={containerRef}
@@ -179,24 +184,30 @@ export default function App() {
 						: { position: "relative" }
 				}
 				className="grid h-svh grid-cols-1 grid-rows-[56px_1fr] overflow-hidden md:grid-rows-1">
-				<header className="z-10 flex items-center justify-between gap-3 border-b border-(--border) bg-(--panel-bg) px-3 md:hidden">
-					<div className="text-sm font-semibold text-slate-100">
-						Relationship Map
+				<header className="z-10 flex items-center justify-between gap-2 border-b border-(--border) bg-(--panel-bg) px-3 md:hidden">
+					<div>
+						<div className="text-sm font-semibold text-slate-100">
+							Relationship Map
+						</div>
+						<div className="text-[10px] text-slate-400">
+							Map, filter, and update people faster
+						</div>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
 						<button
 							type="button"
 							title="Open filters and add person"
 							aria-label="Open filters and add person"
-							className="rounded-lg border border-(--border) bg-slate-900/40 px-3 py-2 text-xs text-slate-200 hover:bg-slate-900/60"
+							className="rounded-lg border border-(--border) bg-slate-900/40 px-2.5 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60"
 							onClick={() => setSidebarOpen(true)}>
-							Filter / Add
+							Left panel
 						</button>
 						<button
 							type="button"
 							title="Open selected person details"
 							aria-label="Open selected person details"
-							className="rounded-lg border border-(--border) bg-slate-900/40 px-3 py-2 text-xs text-slate-200 hover:bg-slate-900/60"
+							disabled={!selectedPersonId}
+							className="rounded-lg border border-(--border) bg-slate-900/40 px-2.5 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60 disabled:cursor-not-allowed disabled:opacity-40"
 							onClick={() => setPersonPanelOpen(true)}>
 							Details
 						</button>
@@ -207,7 +218,10 @@ export default function App() {
 					<Sidebar />
 				</aside>
 
-				<main className="relative overflow-hidden md:col-span-1 md:row-span-1">
+				<main
+					id="relationship-map-canvas"
+					className="relative overflow-hidden md:col-span-1 md:row-span-1"
+					aria-label="Relationship graph canvas area">
 					<div className="absolute inset-0">
 						<GraphView />
 					</div>
@@ -307,7 +321,7 @@ export default function App() {
 						aria-modal="true"
 						aria-label="First-time setup"
 						className={[
-							"w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) shadow-[0_0_90px_rgba(192,132,252,0.18)]",
+							"w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) shadow-[0_0_80px_rgba(var(--accent-rgb),0.24)]",
 							onboardingClosing ? "rm-fadeOut" : "rm-fadeIn",
 						].join(" ")}>
 						<div className="flex-none border-b border-(--border) p-4">
@@ -315,8 +329,7 @@ export default function App() {
 								Relationship Map
 							</div>
 							<div className="mt-1 text-xs text-slate-400">
-								Quick setup so you can start tracking your relationships right
-								away.
+								Two quick steps to set your starting year and first contact.
 							</div>
 						</div>
 
@@ -443,7 +456,7 @@ export default function App() {
 
 								<button
 									type="button"
-									className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_35px_rgba(139,92,246,0.35)] hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
+									className="rounded-lg border border-(--accent-border) bg-(--accent) px-4 py-2 text-sm font-semibold text-white shadow-[0_0_35px_rgba(var(--accent-rgb),0.32)] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
 									disabled={
 										!firstPerson.name.trim().length ||
 										!Number.isFinite(startYear)
@@ -477,9 +490,8 @@ export default function App() {
 							</div>
 
 							<div className="pt-1 text-[11px] text-slate-500">
-								Tutorial: click graph nodes to select a person. On the right,
-								fill in `First/Last interaction`, add `Timeline events` (single
-								day or a period), then create relationships from the same panel.
+								Tip: click graph nodes to open details, add timeline context,
+								then create relationships from the details panel.
 							</div>
 						</div>
 					</div>

@@ -118,6 +118,9 @@ export default function GraphControls({
 				className="absolute left-3 top-3 z-40 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 pointer-events-auto"
 				onPointerDown={(e) => e.stopPropagation()}
 				onWheel={(e) => e.stopPropagation()}>
+				<div className="rounded-md border border-slate-800 bg-slate-950/95 px-2 py-1 text-[10px] font-medium text-slate-300 shadow-lg backdrop-blur">
+					View controls
+				</div>
 				<div className="flex min-h-8 items-center gap-1 rounded-md border border-slate-700 bg-slate-950/95 px-1 py-1 shadow-lg backdrop-blur">
 					<button
 						className="rounded px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-800/70"
@@ -140,7 +143,7 @@ export default function GraphControls({
 					onClick={onRecenter}
 					type="button"
 					aria-label="Recenter graph view">
-					Recenter
+					Recenter view
 				</button>
 
 				<button
@@ -151,7 +154,7 @@ export default function GraphControls({
 						isCompactOpen ? "Hide physics controls" : "Show physics controls"
 					}
 					onClick={() => setIsCompactOpen((v) => !v)}>
-					{isCompactOpen ? "Hide controls" : "Show controls"}
+					{isCompactOpen ? "Hide physics" : "Show physics"}
 				</button>
 
 				<select
@@ -209,7 +212,7 @@ export default function GraphControls({
 					value={selectedNodeId}
 					aria-label="Find and focus person"
 					onChange={(e) => onSelectNode(e.target.value)}>
-					<option value="">Find person</option>
+					<option value="">Find a person...</option>
 					{nodeOptions.map((node) => (
 						<option key={node.id} value={node.id}>
 							{node.label}
@@ -251,7 +254,7 @@ export default function GraphControls({
 							setFilterEventKey("");
 							setFilterTagId("");
 						}}>
-						Clear
+						Clear filters
 					</button>
 				)}
 

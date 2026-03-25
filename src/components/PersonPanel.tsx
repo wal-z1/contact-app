@@ -23,7 +23,7 @@ const PP_STYLES = `
 	height: 100%; width: 100%;
 	display: flex; flex-direction: column;
 	overflow: hidden;
-	font-size: 13px;
+	font-size: 14px;
 	color: var(--text);
 }
 .pp-scroll {
@@ -159,9 +159,15 @@ const PP_STYLES = `
 	margin-bottom: 12px;
 }
 .pp-section-title {
-	font-size: 10px; font-weight: 700;
+	font-size: 11px; font-weight: 700;
 	letter-spacing: 0.08em; text-transform: uppercase;
 	color: var(--text);
+}
+.pp-section-note {
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--text);
+	margin-bottom: 10px;
 }
 .pp-section-count {
 	font-size: 11px; color: #4b5563;
@@ -647,8 +653,8 @@ export default function PersonPanel() {
 							Select a person from the graph to view details
 						</div>
 						<div className="pp-empty-text">
-							You will be able to customize more once you add this person,
-							through their node.
+							Then add context, timeline events, and relationship links from
+							this panel.
 						</div>
 					</div>
 				</div>
@@ -829,6 +835,9 @@ export default function PersonPanel() {
 						<div className="pp-section-header">
 							<span className="pp-section-title">Details</span>
 						</div>
+						<div className="pp-section-note">
+							Keep this concise so cards and graph labels stay readable.
+						</div>
 						<div className="pp-fields-stack">
 							<div className="pp-grid-2">
 								<div className="pp-field">
@@ -927,6 +936,9 @@ export default function PersonPanel() {
 								{(draft.events ?? []).length}
 							</span>
 						</div>
+						<div className="pp-section-note">
+							Capture meaningful moments to make relationships easier to review.
+						</div>
 
 						{eventsSorted.length === 0 ? (
 							<p className="pp-empty">No events recorded yet.</p>
@@ -999,6 +1011,9 @@ export default function PersonPanel() {
 					<div className="pp-section">
 						<div className="pp-section-header">
 							<span className="pp-section-title">Contact & Socials</span>
+						</div>
+						<div className="pp-section-note">
+							Store direct channels and keep handles clean for fast lookup.
 						</div>
 						<div className="pp-fields-stack" style={{ marginBottom: 14 }}>
 							<div className="pp-grid-2">
@@ -1086,6 +1101,9 @@ export default function PersonPanel() {
 							<span className="pp-section-title">Connections</span>
 							<span className="pp-section-count">{connections.length}</span>
 						</div>
+						<div className="pp-section-note">
+							View linked people and remove stale relationships safely.
+						</div>
 						{connections.length === 0 ? (
 							<p className="pp-empty">No connections yet.</p>
 						) : (
@@ -1124,6 +1142,9 @@ export default function PersonPanel() {
 					<div className="pp-section">
 						<div className="pp-section-header">
 							<span className="pp-section-title">Add connection</span>
+						</div>
+						<div className="pp-section-note">
+							Create a new relationship from this person to another contact.
 						</div>
 						<SelectTarget
 							people={people ?? []}

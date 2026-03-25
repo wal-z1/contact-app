@@ -163,6 +163,9 @@ export default function Sidebar() {
 	const sortedPeople = useMemo(() => {
 		const query = peopleSearch.trim().toLowerCase();
 		return [...people]
+			.filter((person) =>
+				activeYear === "all" ? true : person.year === activeYear,
+			)
 			.sort((a, b) => {
 				const an = String(a.name ?? "")
 					.trim()
@@ -183,7 +186,7 @@ export default function Sidebar() {
 					year.includes(query)
 				);
 			});
-	}, [people, peopleSearch]);
+	}, [people, peopleSearch, activeYear]);
 
 	const handleCreate = async () => {
 		if (!form.name.trim()) return;
@@ -404,6 +407,52 @@ export default function Sidebar() {
 	return (
 		<>
 			<style>{`
+				.rm-shell-title {
+					display: flex;
+					flex-direction: column;
+					gap: 3px;
+				}
+				.rm-shell-kicker {
+					font-size: 10px;
+					letter-spacing: 0.08em;
+					text-transform: uppercase;
+					font-weight: 700;
+					color: var(--text);
+				}
+				.rm-shell-heading {
+					font-size: 15px;
+					font-weight: 700;
+					color: var(--text-h);
+				}
+				.rm-shell-sub {
+					font-size: 11px;
+					line-height: 1.4;
+					color: var(--text);
+				}
+				.rm-stats {
+					display: grid;
+					grid-template-columns: repeat(2, minmax(0, 1fr));
+					gap: 8px;
+				}
+				.rm-stat {
+					border: 1px solid var(--border);
+					background: rgba(255,255,255,0.03);
+					border-radius: 8px;
+					padding: 8px;
+				}
+				.rm-stat-label {
+					font-size: 10px;
+					text-transform: uppercase;
+					letter-spacing: 0.08em;
+					color: var(--text);
+					font-weight: 700;
+				}
+				.rm-stat-value {
+					margin-top: 2px;
+					font-size: 16px;
+					font-weight: 700;
+					color: var(--text-h);
+				}
 				.rm-toolbar {
 					position: sticky;
 					top: 0;
@@ -424,9 +473,15 @@ export default function Sidebar() {
 					grid-template-columns: repeat(2, minmax(0, 1fr));
 					gap: 8px;
 				}
+				.rm-action-grid > button:first-child {
+					grid-column: 1 / -1;
+				}
 				@media (max-width: 520px) {
 					.rm-action-grid {
 						grid-template-columns: 1fr;
+					}
+					.rm-action-grid > button:first-child {
+						grid-column: auto;
 					}
 				}
 				.rm-filter-row {
@@ -434,6 +489,13 @@ export default function Sidebar() {
 					align-items: center;
 					gap: 8px;
 					flex-wrap: wrap;
+				}
+				.rm-filter-label {
+					font-size: 11px;
+					font-weight: 700;
+					color: var(--text);
+					letter-spacing: 0.06em;
+					text-transform: uppercase;
 				}
 				.rm-sidebar-btn {
 					display: inline-flex;
@@ -453,8 +515,16 @@ export default function Sidebar() {
 					color: var(--accent);
 					letter-spacing: 0.01em;
 				}
+				.rm-sidebar-btn.primary {
+					font-size: 14px;
+					padding: 9px 14px;
+				}
 				.rm-sidebar-btn:hover {
 					background: rgba(var(--accent-rgb), 0.25);
+				}
+				.rm-sidebar-btn:disabled {
+					opacity: 0.55;
+					cursor: not-allowed;
 				}
 				.rm-upload-note {
 					font-size: 11px;
@@ -795,14 +865,33 @@ export default function Sidebar() {
 			`}</style>
 
 			<div className="flex h-full w-full flex-col gap-4 overflow-y-auto p-4">
+				<div className="rm-shell-title">
+					<div className="rm-shell-kicker">Workspace</div>
+					<div className="rm-shell-heading">People manager</div>
+					<div className="rm-shell-sub">
+						Add contacts, filter by year, and import/export your local data.
+					</div>
+				</div>
+
+				<div className="rm-stats" aria-label="Data summary">
+					<div className="rm-stat">
+						<div className="rm-stat-label">People</div>
+						<div className="rm-stat-value">{people.length}</div>
+					</div>
+					<div className="rm-stat">
+						<div className="rm-stat-label">Visible list</div>
+						<div className="rm-stat-value">{sortedPeople.length}</div>
+					</div>
+				</div>
+
 				<div className="rm-toolbar">
 					<div className="rm-action-grid">
 						<button
 							type="button"
 							onClick={openModal}
-							className="rm-sidebar-btn"
+							className="rm-sidebar-btn primary"
 							aria-label="Open add person dialog">
-							<span style={{ fontSize: 15 }}>＋</span> Add Person
+							<span style={{ fontSize: 15 }}>＋</span> Add person
 						</button>
 
 						<button
@@ -812,7 +901,7 @@ export default function Sidebar() {
 							aria-label="Import people from JSON file"
 							className="rm-sidebar-btn">
 							<span style={{ fontSize: 13 }}>⇪</span>
-							{uploading ? "Importing…" : "Add JSON"}
+							{uploading ? "Importing..." : "Import JSON"}
 						</button>
 
 						<button
@@ -845,7 +934,11 @@ export default function Sidebar() {
 					/>
 
 					<div className="rm-filter-row">
+						<label className="rm-filter-label" htmlFor="rm-active-year">
+							Year filter
+						</label>
 						<select
+							id="rm-active-year"
 							value={activeYear === "all" ? "all" : String(activeYear)}
 							onChange={(e) =>
 								setActiveYear(
@@ -863,16 +956,16 @@ export default function Sidebar() {
 					</div>
 				</div>
 
-				<div className="rm-upload-note">
-					Your data is local-first. Import any JSON file on any PC and continue
-					from there.
+				<div className="rm-upload-note" role="note">
+					Your data is local-first. Import or export JSON to move your workspace
+					between devices.
 				</div>
 
 				<div className="rm-upload-card">
-					<div className="rm-upload-steps">
+					<div className="rm-upload-steps" aria-label="Import guide">
 						<div>1. Create a .json file on your computer.</div>
-						<div>2. Put either a people array or an object with people.</div>
-						<div>3. Click Add JSON and pick the file.</div>
+						<div>2. Add either a people array or an object with people.</div>
+						<div>3. Click Import JSON and choose the file.</div>
 						<div>
 							4. Existing ids are updated, new ids are added automatically.
 						</div>
@@ -906,7 +999,11 @@ export default function Sidebar() {
 
 					{peopleListOpen && (
 						<>
+							<label className="rm-filter-label" htmlFor="rm-people-search">
+								Search
+							</label>
 							<input
+								id="rm-people-search"
 								className="rm-people-search"
 								value={peopleSearch}
 								onChange={(e) => setPeopleSearch(e.target.value)}

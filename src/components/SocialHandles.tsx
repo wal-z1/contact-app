@@ -48,10 +48,13 @@ export default function SocialHandles({
 			<style>{`
 				.sh-grid {
 					display: grid;
-					grid-template-columns: 1fr 1fr;
+					grid-template-columns: 1fr;
 					gap: 10px;
 				}
-				@media (min-width: 480px) {
+				@media (min-width: 520px) {
+					.sh-grid { grid-template-columns: 1fr 1fr; }
+				}
+				@media (min-width: 900px) {
 					.sh-grid { grid-template-columns: 1fr 1fr 1fr; }
 				}
 				.sh-platform { display: flex; flex-direction: column; gap: 6px; }
@@ -121,17 +124,24 @@ export default function SocialHandles({
 					white-space: nowrap;
 				}
 				.sh-add-btn:hover { background: rgba(var(--accent-rgb), 0.22); }
+				.sh-add-btn:focus-visible,
+				.sh-remove:focus-visible,
+				.sh-add-input:focus-visible {
+					outline: 2px solid rgba(var(--accent-rgb), 0.95);
+					outline-offset: 2px;
+				}
 			`}</style>
 
 			<div className="sh-grid">
 				{resolvedPlatforms.map(([k, label, icon]) => {
 					const list = (socials as any)?.[k] ?? [];
+					const inputId = `social-handle-${k}`;
 					return (
 						<div key={k} className="sh-platform">
-							<div className="sh-plat-label">
+							<label className="sh-plat-label" htmlFor={inputId}>
 								<span className="sh-icon">{icon}</span>
 								{label}
-							</div>
+							</label>
 							<div className="sh-handles">
 								{list.length === 0 ? (
 									<span className="sh-empty">—</span>
@@ -152,8 +162,10 @@ export default function SocialHandles({
 							</div>
 							<div className="sh-add-row">
 								<input
+									id={inputId}
 									className="sh-add-input"
 									placeholder="@handle or URL"
+									aria-label={`Add ${label} handle`}
 									value={pending[k] ?? ""}
 									onChange={(e) =>
 										setPending((p) => ({ ...p, [k]: e.target.value }))
@@ -168,6 +180,7 @@ export default function SocialHandles({
 								<button
 									type="button"
 									className="sh-add-btn"
+									aria-label={`Add ${label} handle`}
 									onClick={() => commit(k)}>
 									Add
 								</button>
