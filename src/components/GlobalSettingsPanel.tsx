@@ -26,6 +26,14 @@ export default function GlobalSettingsPanel() {
 	const [editingTagId, setEditingTagId] = useState<string | null>(null);
 	const [editingTagName, setEditingTagName] = useState("");
 
+	// New state for tag searching
+	const [tagSearchQuery, setTagSearchQuery] = useState("");
+
+	// Filter tags based on the search query
+	const filteredTags = (tags ?? []).filter((t) =>
+		(t.name || "").toLowerCase().includes(tagSearchQuery.toLowerCase()),
+	);
+
 	return (
 		<div className="pp-root">
 			<div className="pp-scroll">
@@ -194,11 +202,26 @@ export default function GlobalSettingsPanel() {
 						Manage global tags and their names. Deleting a tag will remove it
 						from all people.
 					</p>
-					{(tags ?? []).length === 0 ? (
-						<p className="pp-empty">No tags yet.</p>
+
+					{/* Search Feature */}
+					{((tags ?? []).length > 0 || tagSearchQuery) && (
+						<div style={{ marginBottom: 12 }}>
+							<input
+								className="pp-input"
+								placeholder="Search tags..."
+								value={tagSearchQuery}
+								onChange={(e) => setTagSearchQuery(e.target.value)}
+							/>
+						</div>
+					)}
+
+					{filteredTags.length === 0 ? (
+						<p className="pp-empty">
+							{tagSearchQuery ? "No tags match your search." : "No tags yet."}
+						</p>
 					) : (
 						<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-							{(tags ?? []).map((t) => (
+							{filteredTags.map((t) => (
 								<div
 									key={t.id}
 									style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -300,7 +323,14 @@ export default function GlobalSettingsPanel() {
 						</div>
 					)}
 
-					<div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+					<div
+						style={{
+							marginTop: 12,
+							paddingTop: 12,
+							borderTop: "1px solid #e5e7eb",
+							display: "flex",
+							gap: 8,
+						}}>
 						<input
 							className="pp-input"
 							placeholder="New tag name"
@@ -319,6 +349,12 @@ export default function GlobalSettingsPanel() {
 										normalized: name.toLowerCase().replace(/\s+/g, "_"),
 									});
 									setNewTagName("");
+									// Optionally clear search to see the new tag
+									if (
+										!name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+									) {
+										setTagSearchQuery("");
+									}
 								} catch (e) {
 									console.error(e);
 								}
