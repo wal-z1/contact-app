@@ -53,6 +53,13 @@ type AppState = {
 
 	rightPanelWidth: number;
 	setRightPanelWidth: (w: number) => void;
+
+	// Manual review mode: walk through people sequentially
+	reviewMode: boolean;
+	reviewList: string[];
+	startManualReview: () => Promise<void>;
+	stopManualReview: () => void;
+	reviewNext: () => void;
 };
 
 const defaultSocials = (): Socials => ({
@@ -590,5 +597,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 				);
 			} catch {}
 		}
+	},
+
+	// Manual review implementation
+	reviewMode: false,
+	reviewList: [],
+	startManualReview: async () => {
+		const people = await db.people.orderBy("name").toArray();
+		const ids = people.map((p) => p.id).filter(Boolean);
+		if (!ids.length) {
+			if (typeof window !== "undefined") window.alert("No people to review.");
+			return;
+		}
+		set({ reviewMode: true, reviewList: ids, selectedPersonId: ids[0] });
+	},
+	stopManualReview: () => {
+		set({ reviewMode: false, reviewList: [], selectedPersonId: null });
+	},
+	reviewNext: () => {
+		const state = get();
+		const list = state.reviewList ?? [];
+		const current = state.selectedPersonId;
+		if (!current) return;
+		const idx = list.findIndex((id) => id === current);
+		if (idx < 0) return;
+		if (idx + 1 < list.length) {
+			set({ selectedPersonId: list[idx + 1] });
+			return;
+		}
+		// finished
+		set({ reviewMode: false, reviewList: [], selectedPersonId: null });
 	},
 }));

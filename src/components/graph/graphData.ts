@@ -30,11 +30,17 @@ export function buildEventOptions(
 	people: Person[],
 ): EventOption[] {
 	const map = new Map<string, EventOption>();
+	const seenLabels = new Set<string>();
 
 	for (const event of savedEvents) {
+		const title = String(event.title ?? "Saved event").trim();
+		const dateKey = String(event.date ?? event.startDate ?? "").trim();
+		const labelKey = `${title}||${dateKey}`.toLowerCase();
+		if (seenLabels.has(labelKey)) continue;
+		seenLabels.add(labelKey);
 		map.set(`saved:${event.id}`, {
 			id: `saved:${event.id}`,
-			title: event.title || "Saved event",
+			title,
 		});
 	}
 
@@ -48,10 +54,16 @@ export function buildEventOptions(
 			const label = `${base} ${event.note ?? ""}`.trim() || "Event";
 
 			if (event.sourceId) {
-				map.set(`saved:${event.sourceId}`, {
-					id: `saved:${event.sourceId}`,
-					title: label,
-				});
+				const key = `saved:${event.sourceId}`;
+				if (!map.has(key)) {
+					// avoid showing duplicates by label if we already added a saved event
+					const labelKey =
+						`${label}||${event.date ?? event.startDate ?? ""}`.toLowerCase();
+					if (!seenLabels.has(labelKey)) {
+						seenLabels.add(labelKey);
+						map.set(key, { id: key, title: label });
+					}
+				}
 				continue;
 			}
 
@@ -274,7 +286,7 @@ export function buildGraphData(
 		const c = connectionCount.get(node.id) ?? 0;
 		return {
 			...node,
-			size: Math.round(20 + Math.min(18, c * 1.7)),
+			size: Math.round(20 + c * 1.7),
 		};
 	});
 
@@ -284,7 +296,7 @@ export function buildGraphData(
 			return {
 				...node,
 				connectedPersonIds: Array.from(personIdsByTag.get(node.id) ?? []),
-				size: Math.round(14 + Math.min(20, peopleCount * 2.6)),
+				size: Math.round(14 + peopleCount * 2.6),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));
@@ -295,7 +307,7 @@ export function buildGraphData(
 			return {
 				...node,
 				connectedPersonIds: Array.from(personIdsByEvent.get(node.id) ?? []),
-				size: Math.round(14 + Math.min(20, peopleCount * 2.6)),
+				size: Math.round(14 + peopleCount * 2.6),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));

@@ -87,6 +87,7 @@ export default function Sidebar() {
 	const setActiveYear = useAppStore((s) => s.setActiveYear);
 	const addPerson = useAppStore((s) => s.addPerson);
 	const importPeopleFromJson = useAppStore((s) => s.importPeopleFromJson);
+	const startManualReview = useAppStore((s) => s.startManualReview);
 	const setSelectedPersonId = useAppStore((s) => s.setSelectedPersonId);
 
 	const initialYear = useMemo(
@@ -904,6 +905,15 @@ export default function Sidebar() {
 							className="rm-sidebar-btn primary"
 							aria-label="Open add person dialog">
 							<span style={{ fontSize: 15 }}>＋</span> Add person
+						</button>
+
+						<button
+							type="button"
+							onClick={() => void startManualReview()}
+							className="rm-sidebar-btn"
+							aria-label="Start manual review">
+							<span style={{ fontSize: 13 }}>👁️</span>
+							Manual review
 						</button>
 
 						<button
