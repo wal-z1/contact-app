@@ -211,39 +211,56 @@ export default function GraphControls({
 					className="min-h-8 rounded-md border border-slate-800 bg-slate-950/95 px-2 py-1 text-[11px] text-slate-100 shadow-lg backdrop-blur"
 					value={selectedNodeId}
 					aria-label="Find and focus person"
+					style={{ maxWidth: 220 }}
 					onChange={(e) => onSelectNode(e.target.value)}>
 					<option value="">Find a person...</option>
-					{nodeOptions.map((node) => (
-						<option key={node.id} value={node.id}>
-							{node.label}
-						</option>
-					))}
+					{nodeOptions.map((node) => {
+						const label = String(node.label ?? "");
+						const display =
+							label.length > 40 ? `${label.slice(0, 37)}…` : label;
+						return (
+							<option key={node.id} value={node.id} title={label}>
+								{display}
+							</option>
+						);
+					})}
 				</select>
 
 				<select
 					className="min-h-8 rounded-md border border-slate-800 bg-slate-950/95 px-2 py-1 text-[11px] text-slate-100 shadow-lg backdrop-blur"
 					value={filterTagId}
 					aria-label="Filter graph by tag"
+					style={{ maxWidth: 220 }}
 					onChange={(e) => setFilterTagId(e.target.value)}>
 					<option value="">All tags</option>
-					{tags.map((tag) => (
-						<option key={tag.id} value={tag.id}>
-							{tag.name}
-						</option>
-					))}
+					{tags.map((tag) => {
+						const name = String(tag.name ?? "");
+						const display = name.length > 40 ? `${name.slice(0, 37)}…` : name;
+						return (
+							<option key={tag.id} value={tag.id} title={name}>
+								{display}
+							</option>
+						);
+					})}
 				</select>
 
 				<select
 					className="min-h-8 rounded-md border border-slate-800 bg-slate-950/95 px-2 py-1 text-[11px] text-slate-100 shadow-lg backdrop-blur"
 					value={filterEventKey}
 					aria-label="Filter graph by event"
+					style={{ maxWidth: 320 }}
 					onChange={(e) => setFilterEventKey(e.target.value)}>
 					<option value="">All events</option>
-					{eventOptions.map((event) => (
-						<option key={event.id} value={event.id}>
-							{event.title}
-						</option>
-					))}
+					{eventOptions.map((event) => {
+						const title = String(event.title ?? "");
+						const display =
+							title.length > 60 ? `${title.slice(0, 57)}…` : title;
+						return (
+							<option key={event.id} value={event.id} title={title}>
+								{display}
+							</option>
+						);
+					})}
 				</select>
 
 				{hasFilters && (
