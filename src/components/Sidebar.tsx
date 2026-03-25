@@ -280,23 +280,6 @@ export default function Sidebar() {
 		URL.revokeObjectURL(url);
 	};
 
-	const exportPeopleJson = async () => {
-		const [allPeople, allTags] = await Promise.all([
-			db.people.toArray(),
-			(db as any).tags ? (db as any).tags.toArray() : Promise.resolve([]),
-		]);
-		downloadJson("relationship-map-people.json", {
-			version: 1,
-			exportedAt: new Date().toISOString(),
-			tags: allTags,
-			people: allPeople,
-		});
-		setUploadError(false);
-		setUploadMessage(
-			`Exported ${allPeople.length} people and ${(allTags as Tag[]).length} tags to JSON.`,
-		);
-	};
-
 	const exportBackupJson = async () => {
 		const [allPeople, allRelationships, allTags, allEvents] = await Promise.all(
 			[
@@ -310,26 +293,27 @@ export default function Sidebar() {
 		const tagsById = new Map<string, string>();
 		for (const tag of allTags as Tag[]) {
 			if (!tag?.id) continue;
-			tagsById.set(tag.id, String(tag.name ?? "").trim());
+			const normalized = String(tag.normalized ?? "").trim();
+			const name = String(tag.name ?? "").trim();
+			tagsById.set(tag.id, normalized || name);
 		}
 
-		const peopleWithImportAliases = allPeople.map((person) => {
-			const inrete = Array.isArray(person.inrete) ? person.inrete : [];
-			const tags = inrete
+		const peopleForBackup = allPeople.map((person) => {
+			const inreteIds = Array.isArray(person.inrete) ? person.inrete : [];
+			const inrete = inreteIds
 				.map((tagId) => tagsById.get(tagId) ?? String(tagId ?? "").trim())
 				.filter(Boolean);
 
 			return {
 				...person,
 				inrete,
-				tags,
 			};
 		});
 
 		downloadJson("relationship-map-backup.json", {
 			version: 1,
 			exportedAt: new Date().toISOString(),
-			people: peopleWithImportAliases,
+			people: peopleForBackup,
 			relationships: allRelationships,
 			tags: allTags,
 			events: allEvents,
@@ -934,15 +918,6 @@ export default function Sidebar() {
 
 						<button
 							type="button"
-							onClick={() => void exportPeopleJson()}
-							aria-label="Export people to JSON file"
-							className="rm-sidebar-btn">
-							<span style={{ fontSize: 13 }}>⇩</span>
-							Export People
-						</button>
-
-						<button
-							type="button"
 							onClick={() => void exportBackupJson()}
 							aria-label="Export full data backup"
 							className="rm-sidebar-btn">
@@ -997,9 +972,7 @@ export default function Sidebar() {
 						<div>
 							4. Existing ids are updated, new ids are added automatically.
 						</div>
-						<div>
-							5. Use Export People / Export Backup to move data between devices.
-						</div>
+						<div>5. Use Export Backup to move data between devices.</div>
 					</div>
 
 					<details className="rm-upload-details">
