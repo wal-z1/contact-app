@@ -28,6 +28,7 @@ type GraphControlsProps = {
 		alphaDecay: number;
 		velocityDecay: number;
 		linkIterations: number;
+		nodeSizeCap: number;
 	};
 	setPhysicsValue: <K extends keyof GraphControlsProps["physics"]>(
 		key: K,
@@ -100,6 +101,7 @@ export default function GraphControls({
 					max: 6,
 					step: 1,
 				},
+				nodeSizeCap: { label: "Node size cap", min: 20, max: 400, step: 2 },
 			}) satisfies Record<
 				PhysicsKey,
 				{ label: string; min: number; max: number; step: number }

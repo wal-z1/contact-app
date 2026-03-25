@@ -83,6 +83,7 @@ export function buildGraphData(
 	tags: Tag[],
 	savedEvents: Event[],
 	filters: { filterEventKey: string; filterTagId: string },
+	nodeSizeCap = 100,
 ): { nodes: GraphNode[]; links: GraphLink[] } {
 	let sourcePeople = people;
 
@@ -287,7 +288,7 @@ export function buildGraphData(
 		return {
 			...node,
 			// allow nodes to grow larger when they have many connections
-			size: Math.round(20 + Math.min(100, c * 1.7)),
+			size: Math.round(20 + Math.min(nodeSizeCap, c * 1.7)),
 		};
 	});
 
@@ -298,7 +299,7 @@ export function buildGraphData(
 				...node,
 				connectedPersonIds: Array.from(personIdsByTag.get(node.id) ?? []),
 				// increase upper bound so tag nodes can become larger with more members
-				size: Math.round(14 + Math.min(100, peopleCount * 2.6)),
+				size: Math.round(14 + Math.min(nodeSizeCap, peopleCount * 2.6)),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));
@@ -310,7 +311,7 @@ export function buildGraphData(
 				...node,
 				connectedPersonIds: Array.from(personIdsByEvent.get(node.id) ?? []),
 				// increase upper bound so event nodes can become larger with more attendees
-				size: Math.round(14 + Math.min(100, peopleCount * 2.6)),
+				size: Math.round(14 + Math.min(nodeSizeCap, peopleCount * 2.6)),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));

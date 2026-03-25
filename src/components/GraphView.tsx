@@ -44,6 +44,7 @@ export default function GraphView() {
 		alphaDecay: 0.035,
 		velocityDecay: 0.2,
 		linkIterations: 2,
+		nodeSizeCap: 100,
 	});
 
 	const fgRef = useRef<ForceGraphMethods<any, any> | undefined>(undefined);
@@ -68,10 +69,17 @@ export default function GraphView() {
 	}, [savedEvents, visiblePeople]);
 
 	const graphData = useMemo(() => {
-		return buildGraphData(visiblePeople, relationships, tags, savedEvents, {
-			filterEventKey,
-			filterTagId,
-		});
+		return buildGraphData(
+			visiblePeople,
+			relationships,
+			tags,
+			savedEvents,
+			{
+				filterEventKey,
+				filterTagId,
+			},
+			physics.nodeSizeCap,
+		);
 	}, [
 		visiblePeople,
 		relationships,
@@ -79,6 +87,7 @@ export default function GraphView() {
 		savedEvents,
 		filterEventKey,
 		filterTagId,
+		physics.nodeSizeCap,
 	]);
 
 	const nodeOptions = useMemo(
