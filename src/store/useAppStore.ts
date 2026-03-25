@@ -1,0 +1,543 @@
+import { create } from "zustand";
+import { nanoid } from "nanoid";
+import type {
+	Event,
+	Person,
+	Relationship,
+	RelationshipType,
+	Socials,
+	TimelineEvent,
+	Tag,
+} from "../models/types";
+import { db } from "../db/db";
+import { DEFAULT_NODE_COLOR, isValidNodeColor } from "../utils/nodeColors";
+
+type ActiveYear = number | "all";
+
+export type Theme = {
+	accent: string;
+	bg: string;
+	panelBg: string;
+	border: string;
+	text: string;
+	textMuted: string;
+};
+
+type AppState = {
+	selectedPersonId: string | null;
+	activeYear: ActiveYear;
+	theme: Theme;
+
+	relationshipTypes: RelationshipType[];
+	addRelationshipType: (type: RelationshipType) => void;
+
+	setSelectedPersonId: (id: string | null) => void;
+	setActiveYear: (year: ActiveYear) => void;
+	setTheme: (patch: Partial<Theme>) => void;
+
+	addPerson: (overrides?: Partial<Omit<Person, "id">>) => Promise<string>;
+	updatePerson: (id: string, patch: Partial<Person>) => Promise<void>;
+	createRelationship: (
+		from: string,
+		to: string,
+		type: RelationshipType,
+	) => Promise<string>;
+	importPeopleFromJson: (raw: unknown) => Promise<{
+		added: number;
+		updated: number;
+		skipped: number;
+		relationshipsImported: number;
+		eventsImported: number;
+		tagsImported: number;
+	}>;
+
+	rightPanelWidth: number;
+	setRightPanelWidth: (w: number) => void;
+};
+
+const defaultSocials = (): Socials => ({
+	instagram: [],
+	linkedin: [],
+	twitter: [],
+	github: [],
+	mastodon: [],
+	website: [],
+});
+
+const normalizeTag = (value: string) =>
+	String(value ?? "")
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "_");
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+const toStringValue = (value: unknown) =>
+	typeof value === "string" ? value : "";
+
+const parseStringList = (value: unknown): string[] => {
+	if (Array.isArray(value)) {
+		return value.map((entry) => String(entry ?? "").trim()).filter(Boolean);
+	}
+	if (typeof value === "string") {
+		return value
+			.split(",")
+			.map((entry) => entry.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
+const parseSocials = (value: unknown): Socials => {
+	const base = defaultSocials();
+	if (!isRecord(value)) return base;
+	return {
+		instagram: parseStringList(value.instagram),
+		linkedin: parseStringList(value.linkedin),
+		twitter: parseStringList(value.twitter),
+		github: parseStringList(value.github),
+		mastodon: parseStringList(value.mastodon),
+		website: parseStringList(value.website),
+	};
+};
+
+const parseEvents = (value: unknown): TimelineEvent[] => {
+	if (!Array.isArray(value)) return [];
+	const parsed: TimelineEvent[] = [];
+	for (const entry of value) {
+		if (!isRecord(entry)) continue;
+		const kind = entry.kind === "range" ? "range" : "date";
+		const note = toStringValue(entry.note).trim();
+		const date = toStringValue(entry.date).trim();
+		const startDate = toStringValue(entry.startDate).trim();
+		const endDate = toStringValue(entry.endDate).trim();
+		const sourceId = toStringValue(entry.sourceId).trim();
+		if (kind === "date" && !date && !note) continue;
+		if (kind === "range" && !startDate && !endDate && !note) continue;
+		parsed.push({
+			id: toStringValue(entry.id).trim() || nanoid(),
+			kind,
+			note,
+			date: kind === "date" ? date : undefined,
+			startDate: kind === "range" ? startDate : undefined,
+			endDate: kind === "range" ? endDate : undefined,
+			sourceId: sourceId || undefined,
+		});
+	}
+	return parsed;
+};
+
+const toImportRecords = (raw: unknown): Record<string, unknown>[] => {
+	if (Array.isArray(raw)) return raw.filter(isRecord);
+	if (!isRecord(raw)) return [];
+	const people = raw.people;
+	if (Array.isArray(people)) return people.filter(isRecord);
+	return [];
+};
+
+const parseRelationships = (raw: unknown): Relationship[] => {
+	if (!isRecord(raw) || !Array.isArray(raw.relationships)) return [];
+	const parsed: Relationship[] = [];
+	for (const entry of raw.relationships) {
+		if (!isRecord(entry)) continue;
+		const from = toStringValue(entry.from).trim();
+		const to = toStringValue(entry.to).trim();
+		const type = toStringValue(entry.type).trim();
+		if (!from || !to || !type) continue;
+		parsed.push({
+			id: toStringValue(entry.id).trim() || nanoid(),
+			from,
+			to,
+			type,
+		});
+	}
+	return parsed;
+};
+
+const parseSavedEvents = (raw: unknown): Event[] => {
+	if (!isRecord(raw) || !Array.isArray(raw.events)) return [];
+	const parsed: Event[] = [];
+	for (const entry of raw.events) {
+		if (!isRecord(entry)) continue;
+		const title = toStringValue(entry.title).trim();
+		const kind = entry.kind === "range" ? "range" : "date";
+		const date = toStringValue(entry.date).trim();
+		const startDate = toStringValue(entry.startDate).trim();
+		const endDate = toStringValue(entry.endDate).trim();
+		if (!title && !date && !startDate && !endDate) continue;
+		parsed.push({
+			id: toStringValue(entry.id).trim() || nanoid(),
+			title: title || "Event",
+			kind,
+			date: date || undefined,
+			startDate: startDate || undefined,
+			endDate: endDate || undefined,
+			note: toStringValue(entry.note).trim() || undefined,
+		});
+	}
+	return parsed;
+};
+
+const parseTags = (raw: unknown): Tag[] => {
+	if (!isRecord(raw) || !Array.isArray(raw.tags)) return [];
+	const parsed: Tag[] = [];
+	for (const entry of raw.tags) {
+		if (!isRecord(entry)) continue;
+		const name = toStringValue(entry.name).trim();
+		if (!name) continue;
+		const normalized = normalizeTag(
+			toStringValue(entry.normalized).trim() || name,
+		);
+		parsed.push({
+			id: toStringValue(entry.id).trim() || nanoid(),
+			name,
+			normalized,
+		});
+	}
+	return parsed;
+};
+
+const getDefaultPersonValues = (activeYear: ActiveYear): Omit<Person, "id"> => {
+	const year =
+		typeof activeYear === "number" ? activeYear : new Date().getFullYear();
+	return {
+		name: "New Person",
+		nodeColor: DEFAULT_NODE_COLOR,
+		description: "",
+		lore: "",
+		firstInteraction: "",
+		lastInteraction: "",
+		inrete: [],
+		year,
+		email: "",
+		phone: "",
+		socials: defaultSocials(),
+		events: [],
+	};
+};
+
+// Debounce helper – returns a function that delays execution and cancels the previous pending call
+function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	return (...args: Parameters<T>) => {
+		if (timer) clearTimeout(timer);
+		timer = setTimeout(() => {
+			timer = null;
+			fn(...args);
+		}, ms);
+	};
+}
+
+// One debounced DB-write slot per person ID
+const updateDebounceMap = new Map<string, ReturnType<typeof debounce>>();
+
+const getDebouncedUpdate = (id: string) => {
+	if (!updateDebounceMap.has(id)) {
+		updateDebounceMap.set(
+			id,
+			debounce(
+				(patch: Partial<Person>) =>
+					db.people.update(id, patch as Partial<Person>),
+				350,
+			),
+		);
+	}
+	return updateDebounceMap.get(id)!;
+};
+
+export const useAppStore = create<AppState>((set, get) => ({
+	selectedPersonId: null,
+	activeYear: (() => {
+		if (typeof window === "undefined") return "all";
+		const raw = window.localStorage.getItem("relationship-map.startYear");
+		if (!raw) return "all";
+		const num = Number(raw);
+		return Number.isFinite(num) ? num : "all";
+	})(),
+	theme: (() => {
+		const defaults = {
+			accent: "#c084fc",
+			bg: "#0b1020",
+			panelBg: "rgba(11,16,32,0.7)",
+			border: "#2e303a",
+			text: "#f3f4f6",
+			textMuted: "#9ca3af",
+		};
+		if (typeof window === "undefined") return defaults;
+		try {
+			const raw = window.localStorage.getItem("relationship-map.theme");
+			if (!raw) return defaults;
+			const parsed = JSON.parse(raw) as Partial<Theme>;
+			return {
+				accent:
+					typeof parsed.accent === "string" ? parsed.accent : defaults.accent,
+				bg: typeof parsed.bg === "string" ? parsed.bg : defaults.bg,
+				panelBg:
+					typeof parsed.panelBg === "string"
+						? parsed.panelBg
+						: defaults.panelBg,
+				border:
+					typeof parsed.border === "string" ? parsed.border : defaults.border,
+				text: typeof parsed.text === "string" ? parsed.text : defaults.text,
+				textMuted:
+					typeof parsed.textMuted === "string"
+						? parsed.textMuted
+						: defaults.textMuted,
+			};
+		} catch {
+			return defaults;
+		}
+	})(),
+
+	setSelectedPersonId: (id) => set({ selectedPersonId: id }),
+	setActiveYear: (year) => {
+		if (typeof window !== "undefined") {
+			if (year === "all")
+				window.localStorage.removeItem("relationship-map.startYear");
+			else
+				window.localStorage.setItem("relationship-map.startYear", String(year));
+		}
+		set({ activeYear: year });
+	},
+
+	setTheme: (patch) => {
+		const next = { ...get().theme, ...(patch ?? {}) };
+		set({ theme: next });
+		if (typeof window !== "undefined") {
+			window.localStorage.setItem(
+				"relationship-map.theme",
+				JSON.stringify(next),
+			);
+		}
+	},
+
+	relationshipTypes: (() => {
+		const defaults: RelationshipType[] = [
+			"friend",
+			"studied_with",
+			"met_at",
+			"colleague",
+			"family",
+		];
+		if (typeof window === "undefined") return defaults;
+		try {
+			const raw = window.localStorage.getItem(
+				"relationship-map.relationshipTypes",
+			);
+			if (!raw) return defaults;
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) return defaults;
+			return parsed.map((v: any) => String(v));
+		} catch {
+			return defaults;
+		}
+	})(),
+
+	addRelationshipType: (type) => {
+		const t = String(type).trim();
+		if (!t) return;
+		set((state) => {
+			if (state.relationshipTypes.includes(t)) return {};
+			const next = [...state.relationshipTypes, t];
+			if (typeof window !== "undefined") {
+				try {
+					window.localStorage.setItem(
+						"relationship-map.relationshipTypes",
+						JSON.stringify(next),
+					);
+				} catch {}
+			}
+			return { relationshipTypes: next };
+		});
+	},
+
+	addPerson: async (overrides) => {
+		const id = nanoid();
+		const values = getDefaultPersonValues(get().activeYear);
+		const person: Person = { id, ...values, ...(overrides ?? {}) };
+		await db.people.add(person);
+		set({ selectedPersonId: id });
+		return id;
+	},
+
+	// Debounced at store level as a safety net; primary debouncing is in PersonPanel
+	updatePerson: async (id, patch) => {
+		const debouncedWrite = getDebouncedUpdate(id);
+		debouncedWrite(patch);
+	},
+
+	createRelationship: async (from, to, type) => {
+		const id = nanoid();
+		const relationship: Relationship = { id, from, to, type };
+		await db.relationships.add(relationship);
+		return id;
+	},
+
+	importPeopleFromJson: async (raw) => {
+		const records = toImportRecords(raw);
+		if (records.length === 0) {
+			throw new Error(
+				"JSON must be an array of people or an object with a people array.",
+			);
+		}
+
+		const activeYear = get().activeYear;
+		const currentYear: number =
+			typeof activeYear === "number" ? activeYear : new Date().getFullYear();
+
+		let added = 0;
+		let updated = 0;
+		let skipped = 0;
+		let relationshipsImported = 0;
+		let eventsImported = 0;
+		let tagsImported = 0;
+
+		await db.transaction(
+			"rw",
+			db.people,
+			db.tags,
+			db.relationships,
+			db.events,
+			async () => {
+				const tagsTable = db.tags as unknown as {
+					toArray: () => Promise<Tag[]>;
+					add: (value: Tag) => Promise<string>;
+				};
+				const existingTags = await tagsTable.toArray();
+				const tagByNormalized = new Map<string, Tag>();
+				for (const tag of existingTags) {
+					tagByNormalized.set(normalizeTag(tag.normalized ?? tag.name), tag);
+				}
+
+				for (const entry of records) {
+					const name = toStringValue(entry.name).trim();
+					if (!name) {
+						skipped += 1;
+						continue;
+					}
+
+					const rawId = toStringValue(entry.id).trim();
+					const personId = rawId || nanoid();
+
+					const parsedYear = Number(entry.year);
+					const year = Number.isFinite(parsedYear) ? parsedYear : currentYear;
+
+					const tagsInput = parseStringList(entry.inrete);
+					const tagIds: string[] = [];
+					for (const tagName of tagsInput) {
+						const normalized = normalizeTag(tagName);
+						if (!normalized) continue;
+						const existing = tagByNormalized.get(normalized);
+						if (existing) {
+							tagIds.push(existing.id);
+							continue;
+						}
+						const id = nanoid();
+						const created: Tag = { id, name: tagName, normalized };
+						await tagsTable.add(created);
+						tagByNormalized.set(normalized, created);
+						tagIds.push(id);
+					}
+
+					const person: Person = {
+						id: personId,
+						name,
+						nodeColor: isValidNodeColor(entry.nodeColor)
+							? entry.nodeColor
+							: DEFAULT_NODE_COLOR,
+						year,
+						description: toStringValue(entry.description).trim(),
+						firstInteraction: toStringValue(entry.firstInteraction).trim(),
+						lastInteraction: toStringValue(entry.lastInteraction).trim(),
+						lore: toStringValue(entry.lore).trim(),
+						email: toStringValue(entry.email).trim(),
+						phone: toStringValue(entry.phone).trim(),
+						inrete: tagIds,
+						socials: parseSocials(entry.socials),
+						events: parseEvents(entry.events),
+					};
+
+					const exists = await db.people.get(personId);
+					if (exists) {
+						await db.people.update(personId, person);
+						updated += 1;
+					} else {
+						await db.people.add(person);
+						added += 1;
+					}
+				}
+
+				const importedTags = parseTags(raw);
+				for (const tag of importedTags) {
+					const normalized = normalizeTag(tag.normalized ?? tag.name);
+					const existing = await (db.tags as any)
+						.where("normalized")
+						.equals(normalized)
+						.first();
+					if (existing) continue;
+					await (db.tags as any).add({ ...tag, normalized });
+					tagsImported += 1;
+				}
+
+				const importedEvents = parseSavedEvents(raw);
+				for (const event of importedEvents) {
+					const exists = await db.events.get(event.id);
+					if (exists) {
+						await db.events.update(event.id, event);
+					} else {
+						await db.events.add(event);
+					}
+					eventsImported += 1;
+				}
+
+				const importedRelationships = parseRelationships(raw);
+				for (const relationship of importedRelationships) {
+					const exists = await db.relationships.get(relationship.id);
+					if (exists) {
+						await db.relationships.update(relationship.id, relationship);
+					} else {
+						await db.relationships.add(relationship);
+					}
+					relationshipsImported += 1;
+				}
+			},
+		);
+
+		return {
+			added,
+			updated,
+			skipped,
+			relationshipsImported,
+			eventsImported,
+			tagsImported,
+		};
+	},
+
+	rightPanelWidth: (() => {
+		if (typeof window === "undefined") return 360;
+		try {
+			const raw = window.localStorage.getItem(
+				"relationship-map.rightPanelWidth",
+			);
+			if (!raw) return 360;
+			const n = Number(raw);
+			return Number.isFinite(n) ? n : 360;
+		} catch {
+			return 360;
+		}
+	})(),
+
+	setRightPanelWidth: (w) => {
+		const next = Math.max(200, Math.min(900, Math.round(Number(w) || 360)));
+		set({ rightPanelWidth: next });
+		if (typeof window !== "undefined") {
+			try {
+				window.localStorage.setItem(
+					"relationship-map.rightPanelWidth",
+					String(next),
+				);
+			} catch {}
+		}
+	},
+}));
