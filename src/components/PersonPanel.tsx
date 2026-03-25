@@ -11,6 +11,7 @@ import type {
 	Tag,
 } from "../models/types";
 import SocialHandles from "./SocialHandles";
+import EventModal from "./EventModal";
 import {
 	DEFAULT_NODE_COLOR,
 	NODE_COLOR_OPTIONS,
@@ -716,67 +717,20 @@ export default function PersonPanel() {
 							)}
 
 							{editingEventId && editingEventDraft && (
-								<div style={{ marginTop: 8 }}>
-									<div style={{ display: "flex", gap: 8 }}>
-										<input
-											className="pp-input"
-											value={editingEventDraft.title ?? ""}
-											onChange={(e) =>
-												setEditingEventDraft((d: any) => ({
-													...d,
-													title: e.target.value,
-												}))
-											}
-										/>
-										<select
-											className="pp-select"
-											value={editingEventDraft.kind}
-											onChange={(e) =>
-												setEditingEventDraft((d: any) => ({
-													...d,
-													kind: e.target.value,
-												}))
-											}>
-											<option value="date">date</option>
-											<option value="range">range</option>
-										</select>
-										<input
-											type="date"
-											className="pp-input"
-											value={editingEventDraft.date ?? ""}
-											onChange={(e) =>
-												setEditingEventDraft((d: any) => ({
-													...d,
-													date: e.target.value,
-												}))
-											}
-										/>
-										<button
-											className="pp-btn-primary"
-											onClick={async () => {
-												try {
-													await db.events.update(
-														editingEventId,
-														editingEventDraft,
-													);
-												} catch (e) {
-													console.error(e);
-												}
-												setEditingEventId(null);
-												setEditingEventDraft(null);
-											}}>
-											Save
-										</button>
-										<button
-											className="pp-btn-secondary"
-											onClick={() => {
-												setEditingEventId(null);
-												setEditingEventDraft(null);
-											}}>
-											Cancel
-										</button>
-									</div>
-								</div>
+								<EventModal
+									event={editingEventDraft}
+									onClose={() => {
+										setEditingEventId(null);
+										setEditingEventDraft(null);
+									}}
+									onSave={async (updated) => {
+										try {
+											await db.events.update(editingEventId, updated as any);
+										} catch (e) {
+											console.error(e);
+										}
+									}}
+								/>
 							)}
 
 							<div style={{ marginTop: 12 }}>
