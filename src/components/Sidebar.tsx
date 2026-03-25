@@ -45,6 +45,11 @@ const SOCIAL_ICONS: Record<string, string> = {
 };
 
 const BULK_JSON_EXAMPLE = `{
+	"tags": [
+		{ "id": "tag-work", "name": "work", "normalized": "work" },
+		{ "id": "tag-frontend", "name": "frontend", "normalized": "frontend" },
+		{ "id": "tag-community", "name": "community", "normalized": "community" }
+	],
 	"people": [
 		{
 			"id": "sam-001",
@@ -57,7 +62,7 @@ const BULK_JSON_EXAMPLE = `{
 			"lore": "Helped with launch docs",
 			"email": "sam@example.com",
 			"phone": "+1 555 111 2233",
-			"inrete": ["work", "frontend", "community"],
+			"inrete": ["tag-work", "tag-frontend", "tag-community"],
 			"socials": {
 				"twitter": ["samcodes"],
 				"linkedin": ["sam-rivera"]
@@ -276,16 +281,16 @@ export default function Sidebar() {
 			db.people.toArray(),
 			(db as any).tags ? (db as any).tags.toArray() : Promise.resolve([]),
 		]);
-		const tagById = new Map((allTags as Tag[]).map((t) => [t.id, t.name]));
-		const peopleForFile = allPeople.map((person) => ({
-			...person,
-			inrete: (Array.isArray(person.inrete) ? person.inrete : []).map(
-				(tagId) => tagById.get(tagId) ?? tagId,
-			),
-		}));
-		downloadJson("relationship-map-people.json", { people: peopleForFile });
+		downloadJson("relationship-map-people.json", {
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			tags: allTags,
+			people: allPeople,
+		});
 		setUploadError(false);
-		setUploadMessage(`Exported ${peopleForFile.length} people to JSON.`);
+		setUploadMessage(
+			`Exported ${allPeople.length} people and ${(allTags as Tag[]).length} tags to JSON.`,
+		);
 	};
 
 	const exportBackupJson = async () => {

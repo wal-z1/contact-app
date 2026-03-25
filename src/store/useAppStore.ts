@@ -183,6 +183,16 @@ const parseTags = (raw: unknown): Tag[] => {
 	if (!isRecord(raw) || !Array.isArray(raw.tags)) return [];
 	const parsed: Tag[] = [];
 	for (const entry of raw.tags) {
+		if (typeof entry === "string") {
+			const name = entry.trim();
+			if (!name) continue;
+			parsed.push({
+				id: nanoid(),
+				name,
+				normalized: normalizeTag(name),
+			});
+			continue;
+		}
 		if (!isRecord(entry)) continue;
 		const name = toStringValue(entry.name).trim();
 		if (!name) continue;
@@ -406,8 +416,38 @@ export const useAppStore = create<AppState>((set, get) => ({
 				};
 				const existingTags = await tagsTable.toArray();
 				const tagByNormalized = new Map<string, Tag>();
+				const tagById = new Map<string, Tag>();
+				const importedTagIdToResolvedId = new Map<string, string>();
 				for (const tag of existingTags) {
 					tagByNormalized.set(normalizeTag(tag.normalized ?? tag.name), tag);
+					tagById.set(tag.id, tag);
+				}
+
+				const importedTags = parseTags(raw);
+				for (const tag of importedTags) {
+					const normalized = normalizeTag(tag.normalized ?? tag.name);
+					if (!normalized) continue;
+					const byNormalized = tagByNormalized.get(normalized);
+					if (byNormalized) {
+						if (tag.id) importedTagIdToResolvedId.set(tag.id, byNormalized.id);
+						continue;
+					}
+
+					let nextId = tag.id || nanoid();
+					if (tagById.has(nextId)) {
+						nextId = nanoid();
+					}
+
+					const created: Tag = {
+						id: nextId,
+						name: tag.name,
+						normalized,
+					};
+					await tagsTable.add(created);
+					tagByNormalized.set(normalized, created);
+					tagById.set(created.id, created);
+					if (tag.id) importedTagIdToResolvedId.set(tag.id, created.id);
+					tagsImported += 1;
 				}
 
 				for (const entry of records) {
@@ -423,21 +463,42 @@ export const useAppStore = create<AppState>((set, get) => ({
 					const parsedYear = Number(entry.year);
 					const year = Number.isFinite(parsedYear) ? parsedYear : currentYear;
 
-					const tagsInput = parseStringList(entry.inrete);
-					const tagIds: string[] = [];
-					for (const tagName of tagsInput) {
-						const normalized = normalizeTag(tagName);
+					const tagsInput = [
+						...parseStringList(entry.inrete),
+						...parseStringList(entry.tags),
+					];
+					const nextTagIds = new Set<string>();
+					for (const rawTagRef of tagsInput) {
+						const tagRef = String(rawTagRef ?? "").trim();
+						if (!tagRef) continue;
+
+						const resolvedImportedId = importedTagIdToResolvedId.get(tagRef);
+						if (resolvedImportedId) {
+							nextTagIds.add(resolvedImportedId);
+							continue;
+						}
+
+						const byId = tagById.get(tagRef);
+						if (byId) {
+							nextTagIds.add(byId.id);
+							continue;
+						}
+
+						const normalized = normalizeTag(tagRef);
 						if (!normalized) continue;
 						const existing = tagByNormalized.get(normalized);
 						if (existing) {
-							tagIds.push(existing.id);
+							nextTagIds.add(existing.id);
 							continue;
 						}
+
 						const id = nanoid();
-						const created: Tag = { id, name: tagName, normalized };
+						const created: Tag = { id, name: tagRef, normalized };
 						await tagsTable.add(created);
 						tagByNormalized.set(normalized, created);
-						tagIds.push(id);
+						tagById.set(id, created);
+						nextTagIds.add(id);
+						tagsImported += 1;
 					}
 
 					const person: Person = {
@@ -453,7 +514,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 						lore: toStringValue(entry.lore).trim(),
 						email: toStringValue(entry.email).trim(),
 						phone: toStringValue(entry.phone).trim(),
-						inrete: tagIds,
+						inrete: Array.from(nextTagIds),
 						socials: parseSocials(entry.socials),
 						events: parseEvents(entry.events),
 					};
@@ -466,18 +527,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 						await db.people.add(person);
 						added += 1;
 					}
-				}
-
-				const importedTags = parseTags(raw);
-				for (const tag of importedTags) {
-					const normalized = normalizeTag(tag.normalized ?? tag.name);
-					const existing = await (db.tags as any)
-						.where("normalized")
-						.equals(normalized)
-						.first();
-					if (existing) continue;
-					await (db.tags as any).add({ ...tag, normalized });
-					tagsImported += 1;
 				}
 
 				const importedEvents = parseSavedEvents(raw);
