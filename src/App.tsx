@@ -32,6 +32,12 @@ export default function App() {
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [personPanelOpen, setPersonPanelOpen] = useState(false);
 
+	const showLeftPanel = useAppStore((s) => s.showLeftPanel);
+	const setShowLeftPanel = useAppStore((s) => s.setShowLeftPanel);
+	const showRightPanel = useAppStore((s) => s.showRightPanel);
+	const setShowRightPanel = useAppStore((s) => s.setShowRightPanel);
+	const showGraphControls = useAppStore((s) => s.showGraphControls);
+	const setShowGraphControls = useAppStore((s) => s.setShowGraphControls);
 	const rightPanelWidth = useAppStore((s) => s.rightPanelWidth);
 	const setRightPanelWidth = useAppStore((s) => s.setRightPanelWidth);
 
@@ -157,6 +163,7 @@ export default function App() {
 				closeOnboarding();
 				return;
 			}
+
 			if (sidebarOpen) setSidebarOpen(false);
 			if (personPanelOpen) setPersonPanelOpen(false);
 		};
@@ -164,6 +171,15 @@ export default function App() {
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [onboardingMounted, sidebarOpen, personPanelOpen]);
+
+	const gridTemplateColumns = (() => {
+		if (!isMd) return undefined;
+		const cols: string[] = [];
+		if (showLeftPanel) cols.push("280px");
+		cols.push("1fr");
+		if (showRightPanel) cols.push(`${rightPanelWidth}px`);
+		return cols.join(" ");
+	})();
 
 	return (
 		<div className="min-h-screen w-full bg-(--bg) text-(--text-h)">
@@ -177,10 +193,7 @@ export default function App() {
 				ref={containerRef}
 				style={
 					isMd
-						? {
-								gridTemplateColumns: `280px 1fr ${rightPanelWidth}px`,
-								position: "relative",
-							}
+						? { gridTemplateColumns, position: "relative" }
 						: { position: "relative" }
 				}
 				className="grid h-svh grid-cols-1 grid-rows-[56px_1fr] overflow-hidden md:grid-rows-1">
@@ -214,9 +227,11 @@ export default function App() {
 					</div>
 				</header>
 
-				<aside className="hidden border-r border-(--border) bg-(--panel-bg) overflow-y-auto md:block">
-					<Sidebar />
-				</aside>
+				{showLeftPanel && (
+					<aside className="hidden border-r border-(--border) bg-(--panel-bg) overflow-y-auto md:block">
+						<Sidebar />
+					</aside>
+				)}
 
 				<main
 					id="relationship-map-canvas"
@@ -227,9 +242,11 @@ export default function App() {
 					</div>
 				</main>
 
-				<aside className="hidden border-l border-(--border) bg-(--panel-bg) overflow-y-auto md:block">
-					<PersonPanel />
-				</aside>
+				{showRightPanel && (
+					<aside className="hidden border-l border-(--border) bg-(--panel-bg) overflow-y-auto md:block">
+						<PersonPanel />
+					</aside>
+				)}
 
 				{/* draggable resizer (md+) */}
 				<div
@@ -253,6 +270,38 @@ export default function App() {
 						setDragging(true);
 					}}>
 					<div className="h-full w-full bg-transparent hover:bg-slate-800/20" />
+				</div>
+			</div>
+
+			{/* Floating toggles: left / right / graph controls (small, grow on hover) */}
+			<div className="pointer-events-none fixed left-4 bottom-18 z-70">
+				<div className="pointer-events-auto flex items-center gap-2 rounded-md bg-slate-900/60 p-1 border border-slate-800">
+					<button
+						type="button"
+						aria-label="Toggle left panel"
+						title="Toggle left panel"
+						onClick={() => setShowLeftPanel(!showLeftPanel)}
+						className="w-9 h-8 flex items-center justify-center text-slate-100 rounded-md transform transition-transform duration-150 hover:scale-110">
+						{showLeftPanel ? "≡" : "≡"}
+					</button>
+
+					<button
+						type="button"
+						aria-label="Toggle right panel"
+						title="Toggle right panel"
+						onClick={() => setShowRightPanel(!showRightPanel)}
+						className="w-9 h-8 flex items-center justify-center text-slate-100 rounded-md transform transition-transform duration-150 hover:scale-110">
+						{showRightPanel ? "▷" : "▷"}
+					</button>
+
+					<button
+						type="button"
+						aria-label="Toggle canvas controls"
+						title="Toggle canvas controls"
+						onClick={() => setShowGraphControls(!showGraphControls)}
+						className="w-9 h-8 flex items-center justify-center text-slate-100 rounded-md transform transition-transform duration-150 hover:scale-110">
+						{showGraphControls ? "⚙" : "⚙"}
+					</button>
 				</div>
 			</div>
 

@@ -60,6 +60,14 @@ type AppState = {
 	startManualReview: () => Promise<void>;
 	stopManualReview: () => void;
 	reviewNext: () => void;
+
+	// UI toggles
+	showLeftPanel: boolean;
+	setShowLeftPanel: (v: boolean) => void;
+	showRightPanel: boolean;
+	setShowRightPanel: (v: boolean) => void;
+	showGraphControls: boolean;
+	setShowGraphControls: (v: boolean) => void;
 };
 
 const defaultSocials = (): Socials => ({
@@ -628,4 +636,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 		// finished
 		set({ reviewMode: false, reviewList: [], selectedPersonId: null });
 	},
+
+	// UI toggles default to true
+	showLeftPanel: true,
+	setShowLeftPanel: (v: boolean) => set({ showLeftPanel: Boolean(v) }),
+	showRightPanel: true,
+	setShowRightPanel: (v: boolean) => set({ showRightPanel: Boolean(v) }),
+	showGraphControls: true,
+	setShowGraphControls: (v: boolean) => set({ showGraphControls: Boolean(v) }),
 }));

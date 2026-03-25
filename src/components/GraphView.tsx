@@ -106,6 +106,8 @@ export default function GraphView() {
 		return [...yrs].sort((a, b) => b - a);
 	}, [people]);
 
+	const showGraphControls = useAppStore((s) => s.showGraphControls);
+
 	useEffect(() => {
 		if (!selectedPersonId) return;
 
@@ -281,28 +283,30 @@ export default function GraphView() {
 		<div
 			className="relative h-full w-full overflow-hidden bg-slate-900"
 			ref={containerRef}>
-			<GraphControls
-				tags={tags}
-				eventOptions={allEventOptions}
-				nodeOptions={nodeOptions}
-				activeYear={activeYear}
-				yearOptions={yearOptions}
-				filterTagId={filterTagId}
-				filterEventKey={filterEventKey}
-				selectedNodeId={selectedPersonId ?? ""}
-				setActiveYear={setActiveYear}
-				linkDistance={linkDistance}
-				setFilterTagId={setFilterTagId}
-				setFilterEventKey={setFilterEventKey}
-				onSelectNode={selectNodeFromMenu}
-				setLinkDistance={setLinkDistance}
-				physics={physics}
-				setPhysicsValue={setPhysicsValue}
-				onRecenter={recenter}
-				onZoomIn={() => zoomBy(0.2)}
-				onZoomOut={() => zoomBy(-0.2)}
-				isTouchDevice={isTouchDevice}
-			/>
+			{showGraphControls && (
+				<GraphControls
+					tags={tags}
+					eventOptions={allEventOptions}
+					nodeOptions={nodeOptions}
+					activeYear={activeYear}
+					yearOptions={yearOptions}
+					filterTagId={filterTagId}
+					filterEventKey={filterEventKey}
+					selectedNodeId={selectedPersonId ?? ""}
+					setActiveYear={setActiveYear}
+					linkDistance={linkDistance}
+					setFilterTagId={setFilterTagId}
+					setFilterEventKey={setFilterEventKey}
+					onSelectNode={selectNodeFromMenu}
+					setLinkDistance={setLinkDistance}
+					physics={physics}
+					setPhysicsValue={setPhysicsValue}
+					onRecenter={recenter}
+					onZoomIn={() => zoomBy(0.2)}
+					onZoomOut={() => zoomBy(-0.2)}
+					isTouchDevice={isTouchDevice}
+				/>
+			)}
 			<GraphCanvas
 				fgRef={fgRef}
 				width={dimensions.width}
