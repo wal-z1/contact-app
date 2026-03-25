@@ -63,6 +63,56 @@ export class RelationshipMapDB extends Dexie {
 							await tagsTable.add({ id, name, normalized });
 							nextTagIds.push(id);
 						}
+
+						// Also convert legacy `location` string into hierarchical tags (country and country:state)
+						try {
+							const loc = String(p.location ?? "").trim();
+							if (loc) {
+								const parts = loc
+									.split(",")
+									.map((s) => String(s).trim())
+									.filter(Boolean);
+								let country: string | undefined;
+								let state: string | undefined;
+								if (parts.length >= 3) {
+									country = parts[parts.length - 1];
+									state = parts[parts.length - 2];
+								} else if (parts.length === 2) {
+									const a = parts[0];
+									const b = parts[1];
+									if (/^[A-Za-z]{2,3}$/.test(b)) {
+										state = b;
+										country = "USA";
+									} else {
+										country = b;
+										state = a;
+									}
+								} else if (parts.length === 1) {
+									country = parts[0];
+								}
+								const locNames: string[] = [];
+								if (country) locNames.push(country);
+								if (country && state) locNames.push(`${country}:${state}`);
+								for (const name of locNames) {
+									const normalized = normalize(name);
+									const existing = await tagsTable
+										.where("normalized")
+										.equals(normalized)
+										.first();
+									if (existing) {
+										nextTagIds.push(existing.id);
+										continue;
+									}
+									const id = crypto.randomUUID
+										? crypto.randomUUID()
+										: Math.random().toString(36).slice(2, 9);
+									await tagsTable.add({ id, name, normalized });
+									nextTagIds.push(id);
+								}
+							}
+						} catch (e) {
+							console.warn("Location -> tag migration failed", e);
+						}
 						p.inrete = nextTagIds;
 						p.events = Array.isArray(p.events) ? p.events : [];
 						p.socials = p.socials ?? {

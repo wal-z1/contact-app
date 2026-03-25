@@ -3,12 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import { useAppStore } from "../store/useAppStore";
 import { nanoid } from "nanoid";
-import type {
-	Person,
-	TimelineEvent,
-	Relationship,
-	Tag,
-} from "../models/types";
+import type { Person, TimelineEvent, Relationship, Tag } from "../models/types";
 import SocialHandles from "./SocialHandles";
 import EventModal from "./EventModal";
 import AddEventForm from "./PersonPanel/AddEventForm";
@@ -377,6 +372,121 @@ export default function PersonPanel() {
 			.toLowerCase()
 			.replace(/\s+/g, "_");
 
+	// derive location-based tag names from a freeform location string.
+	// returns array like ["USA", "USA:TX"] when possible.
+	const deriveLocationNames = (loc: string) => {
+		const out: string[] = [];
+		const raw = String(loc ?? "").trim();
+		if (!raw) return out;
+		const parts = raw
+			.split(",")
+			.map((p) => p.trim())
+			.filter(Boolean);
+		let country: string | undefined;
+		let state: string | undefined;
+		if (parts.length >= 3) {
+			country = parts[parts.length - 1];
+			state = parts[parts.length - 2];
+		} else if (parts.length === 2) {
+			const a = parts[0];
+			const b = parts[1];
+			if (/^[A-Za-z]{2,3}$/.test(b)) {
+				state = b;
+				country = "USA";
+			} else {
+				country = b;
+				state = a;
+			}
+		} else {
+			// single-part location — treat as country
+			country = parts[0];
+		}
+		if (country) out.push(country);
+		if (country && state) out.push(`${country}:${state}`);
+		return out;
+	};
+
+	const findOrCreateTag = async (rawName: string) => {
+		const name = String(rawName ?? "").trim();
+		if (!name) return null;
+		const normalized = normalizeTag(name);
+		const existing = (tags ?? []).find(
+			(t) =>
+				(
+					String(t.normalized ?? "").trim() || String(t.name ?? "").trim()
+				).toLowerCase() === String(normalized).toLowerCase(),
+		);
+		if (existing) return existing.id;
+		const id = nanoid();
+		await (db as any).tags.add({ id, name, normalized });
+		return id;
+	};
+
+	const ensureLocationTagIds = async (loc: string) => {
+		const names = deriveLocationNames(loc);
+		const ids: string[] = [];
+		for (const n of names) {
+			const id = await findOrCreateTag(n);
+			if (id) ids.push(id);
+		}
+		return ids;
+	};
+
+	const handleLocationChange = (value: string) => {
+		setDraft((prev) => (prev ? { ...prev, location: value } : prev));
+		commitPatchDebounced("location", { location: value });
+		const trimmed = String(value ?? "").trim();
+		if (!trimmed) return;
+
+		// debounce tag creation/attachment to avoid immediate DB writes while typing
+		const key = "location-tags";
+		if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+		debounceTimers.current[key] = setTimeout(async () => {
+			try {
+				const ids = await ensureLocationTagIds(trimmed);
+				if (!ids || ids.length === 0) return;
+				const currentInrete = Array.isArray(draftRef.current?.inrete)
+					? (draftRef.current!.inrete as string[])
+					: [];
+				const next = Array.from(new Set([...(currentInrete ?? []), ...ids]));
+				commitPatchDebounced("inrete", { inrete: next }, 2000);
+			} catch (e) {
+				console.error("Failed ensuring location tags", e);
+			}
+		}, 2000) as unknown as ReturnType<typeof setTimeout>;
+	};
+
+	const handleClearLocation = async () => {
+		const prevLoc = String(draft?.location ?? "").trim();
+		// cancel pending location/tag timers so we don't re-add after clearing
+		if (debounceTimers.current["location-tags"]) {
+			clearTimeout(debounceTimers.current["location-tags"] as any);
+			delete debounceTimers.current["location-tags"];
+		}
+		if (debounceTimers.current["inrete"]) {
+			clearTimeout(debounceTimers.current["inrete"] as any);
+			delete debounceTimers.current["inrete"];
+		}
+		commitPatch({ location: "" });
+		if (!prevLoc) return;
+		// find tag ids for the derived location names and remove them from inrete
+		const locNames = deriveLocationNames(prevLoc).map((s) =>
+			normalizeTag(s).toLowerCase(),
+		);
+		const locTagIds: string[] = [];
+		for (const t of tags ?? []) {
+			const n = String(t.normalized ?? normalizeTag(t.name)).toLowerCase();
+			if (locNames.includes(n)) locTagIds.push(t.id);
+		}
+		const remaining = (draft?.inrete ?? []).filter(
+			(id) => !locTagIds.includes(id),
+		);
+		commitPatch({ inrete: remaining });
+		setDraft((prev) =>
+			prev ? { ...prev, location: "", inrete: remaining } : prev,
+		);
+	};
+
 	const normalizeHandle = (value: string) => {
 		const trimmed = String(value ?? "").trim();
 		if (!trimmed) return "";
@@ -426,6 +536,7 @@ export default function PersonPanel() {
 	const [editingTagName, setEditingTagName] = useState("");
 
 	const [draft, setDraft] = useState<Person | null>(null);
+	const draftRef = useRef<Person | null>(null);
 	const [newInrete, setNewInrete] = useState("");
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
@@ -474,6 +585,20 @@ export default function PersonPanel() {
 			new Set(rawTagIds.map(String).filter(Boolean)),
 		);
 
+		// include any existing location-derived tags (do not create yet)
+		const locNames = deriveLocationNames(String(person.location ?? ""));
+		const locIds: string[] = [];
+		for (const n of locNames) {
+			const normalized = normalizeTag(n);
+			const found = (tags ?? []).find(
+				(t) =>
+					(
+						String(t.normalized ?? "").trim() || String(t.name ?? "").trim()
+					).toLowerCase() === String(normalized).toLowerCase(),
+			);
+			if (found) locIds.push(found.id);
+		}
+
 		const makeSocialList = (raw: unknown): string[] =>
 			coerceSocialArray(raw).map(normalizeHandle).filter(Boolean);
 
@@ -487,7 +612,7 @@ export default function PersonPanel() {
 			firstInteraction: person.firstInteraction ?? "",
 			lastInteraction: person.lastInteraction ?? "",
 			location: person.location ?? "",
-			inrete: normalizedTags,
+			inrete: Array.from(new Set([...(normalizedTags ?? []), ...locIds])),
 			socials: {
 				instagram: makeSocialList((person.socials as any)?.instagram),
 				linkedin: makeSocialList((person.socials as any)?.linkedin),
@@ -498,7 +623,7 @@ export default function PersonPanel() {
 			},
 			events: coerceEvents((person as any).events),
 		});
-	}, [person]);
+	}, [person, tags]);
 
 	useEffect(() => {
 		if (!selectedPersonId) return;
@@ -515,7 +640,7 @@ export default function PersonPanel() {
 	);
 
 	const commitPatchDebounced = useCallback(
-		(key: string, patch: Partial<Person>, delay = 400) => {
+		(key: string, patch: Partial<Person>, delay = 2000) => {
 			if (!selectedPersonId) return;
 			setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
 			if (debounceTimers.current[key]) {
@@ -534,6 +659,10 @@ export default function PersonPanel() {
 			debounceTimers.current = {};
 		};
 	}, [selectedPersonId]);
+
+	useEffect(() => {
+		draftRef.current = draft;
+	}, [draft]);
 
 	const handleAddInrete = async () => {
 		if (!draft) return;
@@ -1394,11 +1523,7 @@ export default function PersonPanel() {
 									<input
 										className="pp-input"
 										value={draft.location ?? ""}
-										onChange={(e) =>
-											commitPatchDebounced("location", {
-												location: e.target.value,
-											})
-										}
+										onChange={(e) => handleLocationChange(e.target.value)}
 										placeholder="City, Country"
 									/>
 									{draft.location && (
@@ -1407,7 +1532,7 @@ export default function PersonPanel() {
 											className="pp-clear-btn"
 											aria-label="Clear location"
 											title="Clear location"
-											onClick={() => commitPatch({ location: "" })}>
+											onClick={() => handleClearLocation()}>
 											✕
 										</button>
 									)}

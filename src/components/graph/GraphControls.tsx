@@ -296,7 +296,7 @@ export default function GraphControls({
 						id="link-distance"
 						type="range"
 						min={60}
-						max={240}
+						max={350}
 						step={5}
 						value={linkDistance}
 						aria-label="Adjust graph spacing"
