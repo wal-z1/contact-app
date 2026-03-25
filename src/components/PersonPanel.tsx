@@ -1474,6 +1474,43 @@ export default function PersonPanel() {
 										</button>
 										<button
 											type="button"
+											className="pp-conn-btn"
+											onClick={async () => {
+												if (!draft) return;
+												try {
+													const existing = await db.relationships
+														.where("from")
+														.equals(c.otherId)
+														.filter((r: any) => r.to === draft.id)
+														.first();
+													if (existing) {
+														if (existing.type === c.type) {
+															window.alert("Already bidirectional.");
+															return;
+														}
+														if (
+															!confirm(
+																`An inverse relationship exists with type "${existing.type}". Create a second inverse relationship with type "${c.type}"?`,
+															)
+														)
+															return;
+													}
+													await createRelationship(c.otherId, draft.id, c.type);
+													window.alert("Bidirectional relationship created.");
+												} catch (e) {
+													console.error(
+														"Failed creating inverse relationship",
+														e,
+													);
+													window.alert(
+														"Failed to create bidirectional relationship.",
+													);
+												}
+											}}>
+											Make bidirectional
+										</button>
+										<button
+											type="button"
 											className="pp-conn-btn danger"
 											onClick={() => {
 												if (!confirm("Delete this relationship?")) return;
