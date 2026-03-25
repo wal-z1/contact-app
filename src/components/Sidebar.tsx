@@ -307,10 +307,29 @@ export default function Sidebar() {
 			],
 		);
 
+		const tagsById = new Map<string, string>();
+		for (const tag of allTags as Tag[]) {
+			if (!tag?.id) continue;
+			tagsById.set(tag.id, String(tag.name ?? "").trim());
+		}
+
+		const peopleWithImportAliases = allPeople.map((person) => {
+			const inrete = Array.isArray(person.inrete) ? person.inrete : [];
+			const tags = inrete
+				.map((tagId) => tagsById.get(tagId) ?? String(tagId ?? "").trim())
+				.filter(Boolean);
+
+			return {
+				...person,
+				inrete,
+				tags,
+			};
+		});
+
 		downloadJson("relationship-map-backup.json", {
 			version: 1,
 			exportedAt: new Date().toISOString(),
-			people: allPeople,
+			people: peopleWithImportAliases,
 			relationships: allRelationships,
 			tags: allTags,
 			events: allEvents,
