@@ -43,6 +43,7 @@ export type Person = {
 	year: number;
 	email: string;
 	phone: string;
+	location?: string;
 	socials: Socials;
 	events: TimelineEvent[];
 };

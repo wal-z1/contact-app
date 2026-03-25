@@ -14,6 +14,7 @@ type FormState = {
 	inrete: string;
 	email: string;
 	phone: string;
+	location: string;
 	socials: Socials;
 };
 
@@ -59,6 +60,7 @@ const BULK_JSON_EXAMPLE = `{
 			"description": "Frontend engineer from meetup",
 			"firstInteraction": "Met at React meetup",
 			"lastInteraction": "Coffee chat about product ideas",
+			"location": "Austin, TX",
 			"lore": "Helped with launch docs",
 			"email": "sam@example.com",
 			"phone": "+1 555 111 2233",
@@ -124,6 +126,7 @@ export default function Sidebar() {
 		inrete: "",
 		email: "",
 		phone: "",
+		location: "",
 		socials: {
 			instagram: [],
 			linkedin: [],
@@ -241,6 +244,7 @@ export default function Sidebar() {
 				lore: form.lore.trim() || "",
 				email: form.email.trim() || "",
 				phone: form.phone.trim() || "",
+				location: form.location.trim() || "",
 				inrete: tagIds,
 				socials: SOCIAL_PLATFORMS.reduce((acc, key) => {
 					const raw = (form.socials as any)[key] ?? [];
@@ -1087,8 +1091,8 @@ export default function Sidebar() {
 									{field("Name", "name", { placeholder: "Full name" })}
 									<div className="rm-row">
 										{field("Year met", "year", { type: "number" })}
-										{field("Email", "email", {
-											placeholder: "name@example.com",
+										{field("Location", "location", {
+											placeholder: "City, Country",
 										})}
 									</div>
 									<div className="rm-row">

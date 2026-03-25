@@ -222,6 +222,7 @@ const getDefaultPersonValues = (activeYear: ActiveYear): Omit<Person, "id"> => {
 		year,
 		email: "",
 		phone: "",
+		location: "",
 		socials: defaultSocials(),
 		events: [],
 	};
@@ -514,6 +515,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 						lore: toStringValue(entry.lore).trim(),
 						email: toStringValue(entry.email).trim(),
 						phone: toStringValue(entry.phone).trim(),
+						location: toStringValue(entry.location).trim(),
 						inrete: Array.from(nextTagIds),
 						socials: parseSocials(entry.socials),
 						events: parseEvents(entry.events),

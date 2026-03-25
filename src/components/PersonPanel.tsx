@@ -466,6 +466,7 @@ export default function PersonPanel() {
 			description: person.description ?? "",
 			firstInteraction: person.firstInteraction ?? "",
 			lastInteraction: person.lastInteraction ?? "",
+			location: person.location ?? "",
 			inrete: normalizedTags,
 			socials: {
 				instagram: makeSocialList((person.socials as any)?.instagram),
@@ -1062,6 +1063,31 @@ export default function PersonPanel() {
 											</button>
 										)}
 									</div>
+								</div>
+							</div>
+							<div className="pp-field">
+								<label className="pp-field-label">Location</label>
+								<div className="pp-contact-field">
+									<input
+										className="pp-input"
+										value={draft.location ?? ""}
+										onChange={(e) =>
+											commitPatchDebounced("location", {
+												location: e.target.value,
+											})
+										}
+										placeholder="City, Country"
+									/>
+									{draft.location && (
+										<button
+											type="button"
+											className="pp-clear-btn"
+											aria-label="Clear location"
+											title="Clear location"
+											onClick={() => commitPatch({ location: "" })}>
+											✕
+										</button>
+									)}
 								</div>
 							</div>
 						</div>
