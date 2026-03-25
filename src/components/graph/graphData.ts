@@ -286,7 +286,8 @@ export function buildGraphData(
 		const c = connectionCount.get(node.id) ?? 0;
 		return {
 			...node,
-			size: Math.round(20 + c * 1.7),
+			// allow nodes to grow larger when they have many connections
+			size: Math.round(20 + Math.min(100, c * 1.7)),
 		};
 	});
 
@@ -296,7 +297,8 @@ export function buildGraphData(
 			return {
 				...node,
 				connectedPersonIds: Array.from(personIdsByTag.get(node.id) ?? []),
-				size: Math.round(14 + peopleCount * 2.6),
+				// increase upper bound so tag nodes can become larger with more members
+				size: Math.round(14 + Math.min(100, peopleCount * 2.6)),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));
@@ -307,7 +309,8 @@ export function buildGraphData(
 			return {
 				...node,
 				connectedPersonIds: Array.from(personIdsByEvent.get(node.id) ?? []),
-				size: Math.round(14 + peopleCount * 2.6),
+				// increase upper bound so event nodes can become larger with more attendees
+				size: Math.round(14 + Math.min(100, peopleCount * 2.6)),
 			};
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));
