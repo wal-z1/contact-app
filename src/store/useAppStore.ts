@@ -23,6 +23,11 @@ export type Theme = {
 	textMuted: string;
 };
 
+// This type is derived from the form state in the original component
+export type PersonFormData = Omit<Person, "id" | "inrete"> & {
+	inrete: string; // Raw comma-separated tags
+};
+
 type AppState = {
 	selectedPersonId: string | null;
 	activeYear: ActiveYear;
@@ -36,6 +41,10 @@ type AppState = {
 	setTheme: (patch: Partial<Theme>) => void;
 
 	addPerson: (overrides?: Partial<Omit<Person, "id">>) => Promise<string>;
+	// NEW: Abstracted person creation logic
+	createPerson: (formData: PersonFormData) => Promise<string>;
+	// NEW: Abstracted export logic
+	exportBackup: () => Promise<string>;
 	updatePerson: (id: string, patch: Partial<Person>) => Promise<void>;
 	createRelationship: (
 		from: string,
@@ -243,7 +252,6 @@ const getDefaultPersonValues = (activeYear: ActiveYear): Omit<Person, "id"> => {
 	};
 };
 
-// Debounce helper – returns a function that delays execution and cancels the previous pending call
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	return (...args: Parameters<T>) => {
@@ -255,7 +263,6 @@ function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
 	};
 }
 
-// One debounced DB-write slot per person ID
 const updateDebounceMap = new Map<string, ReturnType<typeof debounce>>();
 
 const getDebouncedUpdate = (id: string) => {
@@ -270,6 +277,19 @@ const getDebouncedUpdate = (id: string) => {
 		);
 	}
 	return updateDebounceMap.get(id)!;
+};
+
+// Helper to trigger browser download
+const downloadJson = (fileName: string, payload: unknown) => {
+	const blob = new Blob([JSON.stringify(payload, null, 2)], {
+		type: "application/json",
+	});
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = fileName;
+	a.click();
+	URL.revokeObjectURL(url);
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -387,6 +407,102 @@ export const useAppStore = create<AppState>((set, get) => ({
 		return id;
 	},
 
+	createPerson: async (formData: PersonFormData) => {
+		const activeYear = get().activeYear;
+		const initialYear =
+			typeof activeYear === "number" ? activeYear : new Date().getFullYear();
+
+		// Logic for finding or creating tags
+		const requestedTags = formData.inrete
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
+
+		const existingTags = await db.tags.toArray();
+		const tagIds: string[] = [];
+
+		for (const raw of requestedTags) {
+			const normalized = normalizeTag(raw);
+			const found = existingTags.find(
+				(t) => (t.normalized ?? normalizeTag(t.name)) === normalized,
+			);
+
+			if (found) {
+				tagIds.push(found.id);
+				continue;
+			}
+
+			const id = nanoid();
+			try {
+				await db.tags.add({ id, name: raw, normalized });
+			} catch {
+				// ignore duplicate write race
+			}
+			tagIds.push(id);
+		}
+
+		// Create the final person object
+		const personPayload: Omit<Person, "id"> = {
+			name: formData.name.trim(),
+			year: Number(formData.year) || initialYear,
+			description: formData.description.trim(),
+			firstInteraction: formData.firstInteraction.trim(),
+			lastInteraction: formData.lastInteraction.trim(),
+			lore: formData.lore.trim(),
+			email: formData.email.trim(),
+			phone: formData.phone.trim(),
+			location: (formData.location ?? "").trim(),
+			socials: formData.socials,
+			inrete: tagIds,
+			// Defaults for fields not in form
+			nodeColor: DEFAULT_NODE_COLOR,
+			events: [],
+		};
+
+		const personId = nanoid();
+		await db.people.add({ id: personId, ...personPayload });
+		set({ selectedPersonId: personId });
+		return personId;
+	},
+
+	exportBackup: async () => {
+		const [allPeople, allRelationships, allTags, allEvents] = await Promise.all(
+			[
+				db.people.toArray(),
+				db.relationships.toArray(),
+				db.tags.toArray(),
+				db.events.toArray(),
+			],
+		);
+
+		const tagsById = new Map<string, string>();
+		for (const tag of allTags) {
+			if (!tag?.id) continue;
+			const normalized = String(tag.normalized ?? "").trim();
+			const name = String(tag.name ?? "").trim();
+			tagsById.set(tag.id, normalized || name);
+		}
+
+		const peopleForBackup = allPeople.map((person) => {
+			const inreteIds = Array.isArray(person.inrete) ? person.inrete : [];
+			const inrete = inreteIds
+				.map((tagId) => tagsById.get(tagId) ?? String(tagId ?? "").trim())
+				.filter(Boolean);
+			return { ...person, inrete };
+		});
+
+		downloadJson("relationship-map-backup.json", {
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			people: peopleForBackup,
+			relationships: allRelationships,
+			tags: allTags,
+			events: allEvents,
+		});
+
+		return `Backup exported: ${allPeople.length} people, ${allRelationships.length} relationships.`;
+	},
+
 	// Debounced at store level as a safety net; primary debouncing is in PersonPanel
 	updatePerson: async (id, patch) => {
 		const debouncedWrite = getDebouncedUpdate(id);
@@ -426,10 +542,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 			db.relationships,
 			db.events,
 			async () => {
-				const tagsTable = db.tags as unknown as {
-					toArray: () => Promise<Tag[]>;
-					add: (value: Tag) => Promise<string>;
-				};
+				const tagsTable = db.tags;
 				const existingTags = await tagsTable.toArray();
 				const tagByNormalized = new Map<string, Tag>();
 				const tagById = new Map<string, Tag>();
