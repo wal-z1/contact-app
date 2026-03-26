@@ -4,6 +4,7 @@ import { useAppStore } from "../store/useAppStore";
 import type { Person } from "../models/types";
 import GlobalSettingsPanel from "./GlobalSettingsPanel";
 import PersonEditor from "./PersonEditor";
+import StatsPanel from "./StatsPanel";
 
 export default function PersonPanel() {
 	const selectedPersonId = useAppStore((s) => s.selectedPersonId);
@@ -15,7 +16,10 @@ export default function PersonPanel() {
 	return (
 		<>
 			{!selectedPersonId || !person ? (
-				<GlobalSettingsPanel />
+				<>
+					<GlobalSettingsPanel />
+					<StatsPanel />
+				</>
 			) : (
 				<PersonEditor person={person} />
 			)}
