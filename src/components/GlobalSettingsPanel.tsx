@@ -35,36 +35,36 @@ export default function GlobalSettingsPanel() {
 	);
 
 	return (
-		<div className="pp-root">
-			<div className="pp-scroll">
-				<div className="pp-section">
-					<div className="pp-section-header">
-						<span className="pp-section-title">Saved events</span>
-						<span className="pp-section-count">
+		<div className="h-full w-full flex flex-col overflow-hidden text-[14px] text-(--text)">
+			<div className="flex-1 overflow-y-auto pb-8 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-(--border) [&::-webkit-scrollbar-thumb]:rounded-sm">
+				<div className="px-5 mt-5">
+					<div className="flex items-center justify-between pb-2 border-b border-(--border) mb-3">
+						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">Saved events</span>
+						<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px]">
 							{(savedEvents ?? []).length}
 						</span>
 					</div>
-					<p className="pp-section-note">
+					<p className="text-[11px] leading-[1.45] text-[color:var(--text)] mb-2.5">
 						Manage event templates stored in the database.
 					</p>
 					{(savedEvents ?? []).length === 0 ? (
-						<p className="pp-empty">No saved events yet.</p>
+						<p className="text-xs text-[#4b5563] italic py-1">No saved events yet.</p>
 					) : (
-						<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+						<div className="flex flex-col gap-2">
 							{(savedEvents ?? []).map((ev: any) => (
 								<div
 									key={ev.id}
-									style={{ display: "flex", alignItems: "center", gap: 8 }}>
-									<div style={{ flex: 1 }}>
+									className="flex items-center gap-2">
+									<div className="flex-1">
 										<strong>{ev.title}</strong>
-										<div style={{ fontSize: 12, color: "#9ca3af" }}>
+										<div className="text-xs text-[#9ca3af]">
 											{ev.kind === "date"
 												? ev.date
 												: `${ev.startDate ?? ""} → ${ev.endDate ?? ""}`}
 										</div>
 									</div>
 									<button
-										className="pp-btn-secondary"
+										className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 										onClick={() => {
 											setEditingEventId(ev.id);
 											setEditingEventDraft(ev);
@@ -72,7 +72,7 @@ export default function GlobalSettingsPanel() {
 										Edit
 									</button>
 									<button
-										className="pp-btn-secondary"
+										className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 										onClick={() => {
 											if (confirm("Delete saved event?"))
 												void db.events.delete(ev.id);
@@ -101,16 +101,16 @@ export default function GlobalSettingsPanel() {
 						/>
 					)}
 
-					<div style={{ marginTop: 12 }}>
-						<div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+					<div className="mt-3">
+						<div className="flex gap-2 mb-2">
 							<input
-								className="pp-input"
+								className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 								placeholder="Title"
 								value={newSavedTitle}
 								onChange={(e) => setNewSavedTitle(e.target.value)}
 							/>
 							<select
-								className="pp-select"
+								className="appearance-none bg-[rgba(255,255,255,0.03)] border border-[color:var(--border)] rounded-[7px] py-2 pl-2.5 pr-[30px] text-[13px] text-[color:var(--text-h)] w-full cursor-pointer bg-[url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%226%22%20viewBox=%220%200%2010%206%22%3E%3Cpath%20d=%22M1%201l4%204%204-4%22%20stroke=%22%239ca3af%22%20stroke-width=%221.5%22%20fill=%22none%22%20stroke-linecap=%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[position:right_10px_center] transition-colors duration-150 focus:outline-none focus:border-[color:var(--accent)]"
 								value={newSavedKind}
 								onChange={(e) => setNewSavedKind(e.target.value as any)}>
 								<option value="date">date</option>
@@ -120,36 +120,36 @@ export default function GlobalSettingsPanel() {
 						{newSavedKind === "date" ? (
 							<input
 								type="date"
-								className="pp-input"
+								className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 								value={newSavedDate}
 								onChange={(e) => setNewSavedDate(e.target.value)}
 							/>
 						) : (
-							<div className="pp-grid-2">
+							<div className="grid grid-cols-2 gap-2.5">
 								<input
 									type="date"
-									className="pp-input"
+									className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 									value={newSavedStart}
 									onChange={(e) => setNewSavedStart(e.target.value)}
 								/>
 								<input
 									type="date"
-									className="pp-input"
+									className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 									value={newSavedEnd}
 									onChange={(e) => setNewSavedEnd(e.target.value)}
 								/>
 							</div>
 						)}
 						<textarea
-							className="pp-textarea"
+							className="resize-y bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 							rows={2}
 							placeholder="Note"
 							value={newSavedNote}
 							onChange={(e) => setNewSavedNote(e.target.value)}
 						/>
-						<div style={{ display: "flex", gap: 8 }}>
+						<div className="flex gap-2">
 							<button
-								className="pp-btn-primary"
+								className="bg-[color:var(--accent)] border-none rounded-[7px] py-[9px] px-4 text-xs font-bold text-white cursor-pointer w-full transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
 								onClick={async () => {
 									const ev: any = {
 										id: nanoid(),
@@ -179,7 +179,7 @@ export default function GlobalSettingsPanel() {
 								Add saved event
 							</button>
 							<button
-								className="pp-btn-secondary"
+								className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 								onClick={() => {
 									setNewSavedTitle("");
 									setNewSavedDate("");
@@ -193,21 +193,21 @@ export default function GlobalSettingsPanel() {
 					</div>
 				</div>
 
-				<div className="pp-section" style={{ marginTop: 18 }}>
-					<div className="pp-section-header">
-						<span className="pp-section-title">Tags</span>
-						<span className="pp-section-count">{(tags ?? []).length}</span>
+				<div className="px-5 mt-[18px]">
+					<div className="flex items-center justify-between pb-2 border-b border-[color:var(--border)] mb-3">
+						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">Tags</span>
+						<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px]">{(tags ?? []).length}</span>
 					</div>
-					<p className="pp-section-note">
+					<p className="text-[11px] leading-[1.45] text-[color:var(--text)] mb-2.5">
 						Manage global tags and their names. Deleting a tag will remove it
 						from all people.
 					</p>
 
 					{/* Search Feature */}
 					{((tags ?? []).length > 0 || tagSearchQuery) && (
-						<div style={{ marginBottom: 12 }}>
+						<div className="mb-3">
 							<input
-								className="pp-input"
+								className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 								placeholder="Search tags..."
 								value={tagSearchQuery}
 								onChange={(e) => setTagSearchQuery(e.target.value)}
@@ -216,24 +216,24 @@ export default function GlobalSettingsPanel() {
 					)}
 
 					{filteredTags.length === 0 ? (
-						<p className="pp-empty">
+						<p className="text-xs text-[#4b5563] italic py-1">
 							{tagSearchQuery ? "No tags match your search." : "No tags yet."}
 						</p>
 					) : (
-						<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+						<div className="flex flex-col gap-2">
 							{filteredTags.map((t) => (
 								<div
 									key={t.id}
-									style={{ display: "flex", gap: 8, alignItems: "center" }}>
+									className="flex gap-2 items-center">
 									{editingTagId === t.id ? (
 										<>
 											<input
-												className="pp-input"
+												className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 												value={editingTagName}
 												onChange={(e) => setEditingTagName(e.target.value)}
 											/>
 											<button
-												className="pp-btn-primary"
+												className="bg-[color:var(--accent)] border-none rounded-[7px] py-[9px] px-4 text-xs font-bold text-white cursor-pointer w-full transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
 												onClick={async () => {
 													try {
 														await db.tags.update(t.id, {
@@ -252,7 +252,7 @@ export default function GlobalSettingsPanel() {
 												Save
 											</button>
 											<button
-												className="pp-btn-secondary"
+												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 												onClick={() => {
 													setEditingTagId(null);
 													setEditingTagName("");
@@ -262,9 +262,9 @@ export default function GlobalSettingsPanel() {
 										</>
 									) : (
 										<>
-											<div style={{ flex: 1 }}>{t.name}</div>
+											<div className="flex-1">{t.name}</div>
 											<button
-												className="pp-btn-secondary"
+												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 												onClick={() => {
 													setEditingTagId(t.id);
 													setEditingTagName(t.name);
@@ -272,7 +272,7 @@ export default function GlobalSettingsPanel() {
 												Rename
 											</button>
 											<button
-												className="pp-btn-secondary"
+												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
 												onClick={async () => {
 													if (
 														!confirm(
@@ -323,22 +323,15 @@ export default function GlobalSettingsPanel() {
 						</div>
 					)}
 
-					<div
-						style={{
-							marginTop: 12,
-							paddingTop: 12,
-							borderTop: "1px solid #e5e7eb",
-							display: "flex",
-							gap: 8,
-						}}>
+					<div className="mt-3 pt-3 border-t border-[#e5e7eb] flex gap-2">
 						<input
-							className="pp-input"
+							className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 							placeholder="New tag name"
 							value={newTagName}
 							onChange={(e) => setNewTagName(e.target.value)}
 						/>
 						<button
-							className="pp-btn-primary"
+							className="bg-[color:var(--accent)] border-none rounded-[7px] py-[9px] px-4 text-xs font-bold text-white cursor-pointer w-full transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
 							onClick={async () => {
 								const name = String(newTagName ?? "").trim();
 								if (!name) return;
