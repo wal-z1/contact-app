@@ -148,10 +148,9 @@ function sanitizeString(value: unknown): string {
 
 function normalizeName(value: string): string {
 	return String(value ?? "")
-		.normalize("NFKD")
-		.replace(/[\u0300-\u036f]/g, "")
+		.normalize("NFKC")
 		.toLowerCase()
-		.replace(/[^a-z0-9\s]/g, " ")
+		.replace(/[^\p{L}\p{N}\s]/gu, " ")
 		.replace(/\s+/g, " ")
 		.trim();
 }
@@ -315,7 +314,6 @@ function extractBulkTagYearRequest(text: string): {
 		year: Number(bulkMatch[2]),
 	};
 }
-
 function looksLikeLargeBatchInput(text: string): boolean {
 	const source = String(text ?? "").trim();
 	if (!source) return false;
@@ -325,6 +323,9 @@ function looksLikeLargeBatchInput(text: string): boolean {
 		.map((s) => s.trim())
 		.filter(Boolean);
 
+	const parsedFollowers = parseInstagramFollowersDump(source);
+	const hasInstagramFollowerShape = parsedFollowers.length >= 5;
+
 	const hasManyLines = lines.length >= 8;
 	const hasManyHandles = (source.match(/@[a-z0-9._-]+/gi) ?? []).length >= 6;
 	const hasManyUrls = extractUrls(source).length >= 5;
@@ -333,9 +334,49 @@ function looksLikeLargeBatchInput(text: string): boolean {
 			source,
 		);
 
-	return hasManyLines || hasManyHandles || hasManyUrls || hasBulkWords;
+	return (
+		hasInstagramFollowerShape ||
+		hasManyLines ||
+		hasManyHandles ||
+		hasManyUrls ||
+		hasBulkWords
+	);
 }
 
+type ParsedInstagramFollower = {
+	username: string;
+	displayName: string;
+};
+
+function parseInstagramFollowersDump(text: string): ParsedInstagramFollower[] {
+	const lines = String(text ?? "")
+		.split("\n")
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+	const startIndex = lines.findIndex((line) =>
+		/followers of .* on instagram/i.test(line),
+	);
+
+	const body = startIndex >= 0 ? lines.slice(startIndex + 1) : lines;
+
+	const cleaned = body.filter((line) => !/^search$/i.test(line));
+
+	const pairs: ParsedInstagramFollower[] = [];
+	for (let i = 0; i + 1 < cleaned.length; i += 2) {
+		const username = cleaned[i];
+		const displayName = cleaned[i + 1];
+
+		if (!username || !displayName) continue;
+
+		pairs.push({
+			username,
+			displayName,
+		});
+	}
+
+	return pairs;
+}
 async function generateAgentAction(
 	apiKey: string,
 	payload: unknown,
@@ -469,7 +510,11 @@ export default function AIAgentPanel() {
 					inrete: [],
 					socials: {
 						instagram: candidate.instagram
-							? [sanitizeString(candidate.instagram)].filter(Boolean)
+							? [
+									sanitizeString(candidate.instagram).startsWith("http")
+										? sanitizeString(candidate.instagram)
+										: `https://instagram.com/${sanitizeString(candidate.instagram).replace(/^@/, "")}`,
+								].filter(Boolean)
 							: [],
 						linkedin: [],
 						twitter: [],
@@ -530,7 +575,9 @@ export default function AIAgentPanel() {
 			const directTag = extractRequestedTag(userText);
 			const directSocials = extractSocialUpdates(userText);
 			const directBulkTagYear = extractBulkTagYearRequest(userText);
-			const isLargeBatch = looksLikeLargeBatchInput(userText);
+			const parsedFollowers = parseInstagramFollowersDump(userText);
+			const isLargeBatch =
+				looksLikeLargeBatchInput(userText) || parsedFollowers.length > 0;
 
 			if (
 				directBulkTagYear.tagName &&
@@ -589,6 +636,10 @@ export default function AIAgentPanel() {
 				"- newPeople should contain likely new person records to create.",
 				"- Never return markdown or explanations.",
 				"- This app stores tag references on a person in args.patch.inrete as an array of tag IDs.",
+				"- If parsed Instagram followers are provided, treat each item as { username, displayName }.",
+				"- For Instagram follower imports, put the Instagram username into newPeople[].instagram as a full URL like https://instagram.com/username.",
+				"- For Instagram follower imports, prefer displayName as the person's name.",
+				"- For stylized or non-Latin names, preserve them exactly as given.",
 				"- Global tags are separate records with fields id, name, normalized.",
 				"- Social links are mainly stored in args.patch.socials, where each key maps to an array of strings.",
 				"- Allowed socials keys include instagram, linkedin, twitter, github, mastodon, website, facebook.",
@@ -636,6 +687,9 @@ ${JSON.stringify(tagsContext)}
 Large-batch hint:
 ${JSON.stringify({ isLargeBatch })}
 
+Parsed Instagram followers:
+${JSON.stringify(parsedFollowers.slice(0, 300))}
+
 User request:
 ${userText}`,
 							},
@@ -657,25 +711,73 @@ ${userText}`,
 			const action = JSON.parse(unwrapJson(rawText)) as AgentAction;
 
 			if (action.action === "review_people_batch") {
-				const matches = Array.isArray(action.args?.matches)
+				const rawMatches = Array.isArray(action.args?.matches)
 					? action.args.matches
 					: [];
-				const possibleMatches = Array.isArray(action.args?.possibleMatches)
+				const rawPossibleMatches = Array.isArray(action.args?.possibleMatches)
 					? action.args.possibleMatches
 					: [];
 				const newPeople = Array.isArray(action.args?.newPeople)
 					? action.args.newPeople
 					: [];
 
+				const enrichMatch = (item: BatchReviewMatch): BatchReviewMatch => {
+					const input = sanitizeString(item.input);
+					const personId = sanitizeString(item.personId);
+					const aiPersonName = sanitizeString(item.personName);
+
+					const personFromId = personId
+						? people.find((p) => p.id === personId)
+						: undefined;
+
+					const personFromName = aiPersonName
+						? findPersonByName(people, aiPersonName)
+						: undefined;
+
+					const matchedPerson = personFromId || personFromName;
+
+					return {
+						...item,
+						input:
+							input ||
+							aiPersonName ||
+							(matchedPerson ? matchedPerson.name : ""),
+						personId: matchedPerson?.id || personId || undefined,
+						personName: matchedPerson?.name || aiPersonName || undefined,
+						reason: sanitizeString(item.reason),
+						confidence:
+							typeof item.confidence === "number" ? item.confidence : undefined,
+					};
+				};
+
+				const matches = rawMatches.map(enrichMatch).filter((item) => {
+					return Boolean(
+						sanitizeString(item.input) ||
+						sanitizeString(item.personName) ||
+						sanitizeString(item.personId),
+					);
+				});
+
+				const possibleMatches = rawPossibleMatches
+					.map(enrichMatch)
+					.filter((item) => {
+						return Boolean(
+							sanitizeString(item.input) ||
+							sanitizeString(item.personName) ||
+							sanitizeString(item.personId),
+						);
+					});
+
 				setBatchReview({
 					message:
 						action.message ||
-						`I found ${matches.length} confirmed matches, ${possibleMatches.length} possible matches, and ${newPeople.length} new people. Review them below.`,
+						`Found ${matches.length} confirmed matches, ${possibleMatches.length} possible matches, and ${newPeople.length} new people. Review the names below.`,
 					matches,
 					possibleMatches,
 					newPeople,
 					rawInput: sanitizeString(action.args?.rawInput),
 				});
+
 				setResult(
 					action.message ||
 						`Found ${matches.length} confirmed matches, ${possibleMatches.length} possible matches, and ${newPeople.length} new people to review.`,
