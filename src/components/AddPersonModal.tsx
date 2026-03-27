@@ -6,6 +6,7 @@ import {
 	type KeyboardEvent,
 	type ComponentProps,
 } from "react";
+import { createPortal } from "react-dom";
 import { useAppStore } from "../store/useAppStore";
 import type { Socials } from "../models/types";
 import type { PersonFormData } from "../store/useAppStore";
@@ -165,16 +166,143 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 	};
 
 	if (!isOpen) return null;
+	if (typeof document === "undefined") return null;
 
-	return (
-		<div
-			className="rm-overlay"
-			onClick={(e) => e.target === e.currentTarget && onClose()}>
+	return createPortal(
+		<>
+			<style>{`
+				.rm-overlay {
+					position: fixed;
+					inset: 0;
+					z-index: 120;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					padding: 16px;
+					background: rgba(0,0,0,0.72);
+					backdrop-filter: blur(4px);
+					-webkit-backdrop-filter: blur(4px);
+				}
+				.rm-modal {
+					background: #0f1221;
+					border: 1px solid var(--border);
+					border-radius: 16px;
+					width: 100%;
+					max-width: 720px;
+					max-height: 90vh;
+					display: flex;
+					flex-direction: column;
+					overflow: hidden;
+					box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+				}
+				.rm-modal-header {
+					padding: 20px 24px 16px;
+					border-bottom: 1px solid var(--border);
+					flex-shrink: 0;
+				}
+				.rm-modal-title {
+					font-size: 15px;
+					font-weight: 700;
+					color: var(--text-h);
+				}
+				.rm-modal-sub {
+					font-size: 12px;
+					color: var(--text);
+					margin-top: 2px;
+				}
+				.rm-steps { display: flex; gap: 6px; margin-top: 14px; }
+				.rm-step { height: 3px; border-radius: 2px; flex: 1; background: var(--border); }
+				.rm-step.active { background: var(--accent); }
+				.rm-modal-body {
+					flex: 1;
+					overflow-y: auto;
+					padding: 20px 24px;
+					display: flex;
+					flex-direction: column;
+					gap: 14px;
+				}
+				.rm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+				.rm-field { display: flex; flex-direction: column; gap: 5px; }
+				.rm-label {
+					font-size: 11px;
+					font-weight: 600;
+					color: var(--text);
+					letter-spacing: 0.06em;
+					text-transform: uppercase;
+				}
+				.rm-input {
+					background: rgba(255,255,255,0.035);
+					border: 1px solid var(--border);
+					border-radius: 8px;
+					padding: 9px 12px;
+					font-size: 13px;
+					color: var(--text-h);
+					width: 100%;
+					box-sizing: border-box;
+					resize: vertical;
+				}
+				.rm-input:focus { outline: none; border-color: var(--accent); }
+				.rm-section-label {
+					font-size: 11px;
+					font-weight: 600;
+					color: var(--text);
+					letter-spacing: 0.08em;
+					text-transform: uppercase;
+					padding-bottom: 10px;
+					border-bottom: 1px solid var(--border);
+					margin-bottom: 2px;
+				}
+				.rm-modal-footer {
+					padding: 16px 24px;
+					border-top: 1px solid var(--border);
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 8px;
+					flex-shrink: 0;
+				}
+				.rm-btn-ghost, .rm-btn-next, .rm-btn-primary {
+					padding: 8px 16px;
+					border-radius: 8px;
+					font-size: 13px;
+					font-weight: 600;
+					cursor: pointer;
+				}
+				.rm-btn-ghost {
+					border: 1px solid var(--border);
+					background: transparent;
+					color: var(--text);
+				}
+				.rm-btn-next {
+					border: 1px solid var(--accent-border);
+					background: var(--accent-bg);
+					color: var(--accent);
+					margin-left: auto;
+				}
+				.rm-btn-primary {
+					border: none;
+					background: var(--accent);
+					color: #fff;
+				}
+				.rm-btn-primary:disabled,
+				.rm-btn-next:disabled,
+				.rm-btn-ghost:disabled {
+					opacity: 0.45;
+					cursor: not-allowed;
+				}
+				@media (max-width: 640px) {
+					.rm-row { grid-template-columns: 1fr; }
+					.rm-modal { max-height: 95vh; }
+				}
+			`}</style>
 			<div
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="rm-add-person-title"
-				className="rm-modal">
+				className="rm-overlay"
+				onClick={(e) => e.target === e.currentTarget && onClose()}>
+				<div
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="rm-add-person-title"
+					className="rm-modal">
 				<div className="rm-modal-header">
 					<div id="rm-add-person-title" className="rm-modal-title">
 						Add person
@@ -345,5 +473,8 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 				</div>
 			</div>
 		</div>
+		</>
+		,
+		document.body,
 	);
 }
