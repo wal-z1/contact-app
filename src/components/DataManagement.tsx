@@ -45,6 +45,15 @@ function DataManagementComponent() {
 		fileInputRef.current?.click();
 	}, []);
 
+	const handleStartManualReview = useCallback(async () => {
+		setUploadError(false);
+		setUploadMessage("");
+		const started = await startManualReview();
+		if (!started) {
+			setUploadMessage("No people to review yet.");
+		}
+	}, [startManualReview]);
+
 	// ENHANCED: This handler now accepts a format for the export.
 	const handleExport = useCallback(
 		async (format: "single-file" | "multi-file-zip") => {
@@ -126,7 +135,7 @@ function DataManagementComponent() {
 			<div className="rm-action-grid">
 				<button
 					type="button"
-					onClick={startManualReview}
+					onClick={() => void handleStartManualReview()}
 					className="rm-sidebar-btn"
 					aria-label="Start manual review">
 					<span style={{ fontSize: 13 }}>👁️</span>

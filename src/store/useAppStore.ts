@@ -77,8 +77,9 @@ type AppState = {
 
 	reviewMode: boolean;
 	reviewList: string[];
-	startManualReview: () => Promise<void>;
+	startManualReview: () => Promise<boolean>;
 	stopManualReview: () => void;
+	reviewPrev: () => void;
 	reviewNext: () => void;
 
 	showLeftPanel: boolean;
@@ -587,13 +588,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 		const people = await db.people.orderBy("name").toArray();
 		const ids = people.map((p) => p.id).filter(Boolean);
 		if (!ids.length) {
-			if (typeof window !== "undefined") window.alert("No people to review.");
-			return;
+			return false;
 		}
 		set({ reviewMode: true, reviewList: ids, selectedPersonId: ids[0] });
+		return true;
 	},
 	stopManualReview: () => {
 		set({ reviewMode: false, reviewList: [], selectedPersonId: null });
+	},
+	reviewPrev: () => {
+		const state = get();
+		const list = state.reviewList ?? [];
+		const current = state.selectedPersonId;
+		if (!current) return;
+		const idx = list.findIndex((id) => id === current);
+		if (idx > 0) {
+			set({ selectedPersonId: list[idx - 1] });
+		}
 	},
 	reviewNext: () => {
 		const state = get();

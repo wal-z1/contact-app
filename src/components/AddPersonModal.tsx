@@ -9,33 +9,9 @@ import {
 import { useAppStore } from "../store/useAppStore";
 import type { Socials } from "../models/types";
 import type { PersonFormData } from "../store/useAppStore";
+import SocialHandles from "./SocialHandles";
 
 type FormState = Omit<PersonFormData, "nodeColor" | "events">;
-
-const SOCIAL_PLATFORMS: Array<keyof Socials> = [
-	"instagram",
-	"linkedin",
-	"twitter",
-	"github",
-	"mastodon",
-	"website",
-];
-const SOCIAL_LABELS: Record<string, string> = {
-	instagram: "Instagram",
-	linkedin: "LinkedIn",
-	twitter: "Twitter / X",
-	github: "GitHub",
-	mastodon: "Mastodon",
-	website: "Website",
-};
-const SOCIAL_ICONS: Record<string, string> = {
-	instagram: "📸",
-	linkedin: "💼",
-	twitter: "𝕏",
-	github: "⌥",
-	mastodon: "🐘",
-	website: "🌐",
-};
 
 type FormFieldProps = ComponentProps<"input"> & { label: string; id: string };
 const FormField: FC<FormFieldProps> = ({ label, id, ...props }) => (
@@ -140,17 +116,52 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 		}
 	};
 
-	const handleSocialChange = (key: keyof Socials, value: string) => {
-		setForm((s) => ({
-			...s,
-			socials: {
-				...s.socials,
-				[key]: value
-					.split(",")
-					.map((v) => v.trim())
-					.filter(Boolean),
-			},
-		}));
+	const normalizePlatform = (value: string) =>
+		String(value ?? "")
+			.trim()
+			.toLowerCase()
+			.replace(/\s+/g, "_");
+
+	const handleSocialAdd = (platform: string, raw: string) => {
+		const key = normalizePlatform(platform);
+		const value = String(raw ?? "").trim();
+		if (!key || !value) return;
+
+		setForm((s) => {
+			const existing = Array.isArray((s.socials as any)[key])
+				? ((s.socials as any)[key] as string[])
+				: [];
+			if (existing.includes(value)) return s;
+
+			return {
+				...s,
+				socials: {
+					...(s.socials as any),
+					[key]: [...existing, value],
+				} as Socials,
+			};
+		});
+	};
+
+	const handleSocialRemove = (platform: string, index: number) => {
+		const key = normalizePlatform(platform);
+		if (!key) return;
+
+		setForm((s) => {
+			const existing = Array.isArray((s.socials as any)[key])
+				? [...((s.socials as any)[key] as string[])]
+				: [];
+			if (index < 0 || index >= existing.length) return s;
+			existing.splice(index, 1);
+
+			return {
+				...s,
+				socials: {
+					...(s.socials as any),
+					[key]: existing,
+				} as Socials,
+			};
+		});
 	};
 
 	if (!isOpen) return null;
@@ -297,23 +308,12 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 
 							<div>
 								<div className="rm-section-label">Social handles</div>
-								<div className="rm-socials-grid" style={{ marginTop: 12 }}>
-									{SOCIAL_PLATFORMS.map((key) => (
-										<div key={key} className="rm-social-item">
-											<span className="rm-social-label">
-												<span>{SOCIAL_ICONS[key]}</span>
-												{SOCIAL_LABELS[key]}
-											</span>
-											<input
-												className="rm-input"
-												value={(form.socials[key] ?? []).join(", ")}
-												onChange={(e) =>
-													handleSocialChange(key, e.target.value)
-												}
-												placeholder="@handle"
-											/>
-										</div>
-									))}
+								<div style={{ marginTop: 12 }}>
+									<SocialHandles
+										socials={form.socials as Partial<Record<string, string[]>>}
+										onAdd={handleSocialAdd}
+										onRemove={handleSocialRemove}
+									/>
 								</div>
 							</div>
 						</>

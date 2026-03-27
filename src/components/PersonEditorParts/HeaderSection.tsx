@@ -6,7 +6,6 @@ import {
 	mutedPill,
 	NODE_COLOR_OPTIONS,
 	primaryButton,
-	solidAccentButton,
 } from "./constants";
 import { normalizeTag } from "./utils";
 
@@ -14,7 +13,6 @@ type Props = {
 	draft: Person;
 	tags: Tag[];
 	yearsKnown: number | null;
-	reviewMode: boolean;
 	newInterestInput: string;
 	setNewInterestInput: (value: string) => void;
 	onAddInterest: () => void;
@@ -22,14 +20,12 @@ type Props = {
 	onAddSuggestedTag: (tagId: string) => void;
 	onChangeNodeColor: (color: string) => void;
 	onDeletePerson: () => void;
-	onReviewNext: () => void;
 };
 
 export default function HeaderSection({
 	draft,
 	tags,
 	yearsKnown,
-	reviewMode,
 	newInterestInput,
 	setNewInterestInput,
 	onAddInterest,
@@ -37,7 +33,6 @@ export default function HeaderSection({
 	onAddSuggestedTag,
 	onChangeNodeColor,
 	onDeletePerson,
-	onReviewNext,
 }: Props) {
 	const filteredSuggestions =
 		newInterestInput.trim().length > 0
@@ -170,15 +165,6 @@ export default function HeaderSection({
 						onClick={onDeletePerson}>
 						Delete
 					</button>
-
-					{reviewMode && (
-						<button
-							type="button"
-							className={solidAccentButton}
-							onClick={onReviewNext}>
-							Save & Next
-						</button>
-					)}
 				</div>
 			</div>
 		</div>

@@ -26,8 +26,6 @@ import {
 
 export default function PersonEditor({ person }: { person: Person }) {
 	const selectedPersonId = useAppStore((s) => s.selectedPersonId);
-	const reviewMode = useAppStore((s) => s.reviewMode);
-	const reviewNext = useAppStore((s) => s.reviewNext);
 
 	const setSelectedPersonId = useAppStore((s) => s.setSelectedPersonId);
 	const updatePerson = useAppStore((s) => s.updatePerson);
@@ -54,6 +52,7 @@ export default function PersonEditor({ person }: { person: Person }) {
 	const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
 		{},
 	);
+	const pendingPatches = useRef<Record<string, Partial<Person>>>({});
 	const [selectedSavedEventId, setSelectedSavedEventId] = useState("");
 
 	const findOrCreateTag = useCallback(
@@ -112,8 +111,12 @@ export default function PersonEditor({ person }: { person: Person }) {
 				clearTimeout(debounceTimers.current[key]);
 			}
 
+			pendingPatches.current[key] = patch;
+
 			debounceTimers.current[key] = setTimeout(() => {
 				void updatePerson(selectedPersonId, patch);
+				delete debounceTimers.current[key];
+				delete pendingPatches.current[key];
 			}, delay);
 		},
 		[selectedPersonId, updatePerson],
@@ -225,11 +228,20 @@ export default function PersonEditor({ person }: { person: Person }) {
 	}, [selectedPersonId]);
 
 	useEffect(() => {
+		const currentPersonId = selectedPersonId;
 		return () => {
-			Object.values(debounceTimers.current).forEach(clearTimeout);
+			const pendingEntries = Object.entries(debounceTimers.current);
+			for (const [key, timer] of pendingEntries) {
+				clearTimeout(timer);
+				const patch = pendingPatches.current[key];
+				if (currentPersonId && patch) {
+					void updatePerson(currentPersonId, patch);
+				}
+			}
 			debounceTimers.current = {};
+			pendingPatches.current = {};
 		};
-	}, [selectedPersonId]);
+	}, [selectedPersonId, updatePerson]);
 
 	useEffect(() => {
 		draftRef.current = draft;
@@ -496,7 +508,6 @@ export default function PersonEditor({ person }: { person: Person }) {
 					draft={draft}
 					tags={tags ?? []}
 					yearsKnown={yearsKnown}
-					reviewMode={reviewMode}
 					newInterestInput={newInterestInput}
 					setNewInterestInput={setNewInterestInput}
 					onAddInterest={() => void handleAddInterest()}
@@ -504,7 +515,6 @@ export default function PersonEditor({ person }: { person: Person }) {
 					onAddSuggestedTag={addSuggestedTag}
 					onChangeNodeColor={(color) => commitPatch({ nodeColor: color })}
 					onDeletePerson={handleDeletePerson}
-					onReviewNext={reviewNext}
 				/>
 
 				<div className={sectionWrap}>

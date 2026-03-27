@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const DEFAULT_PLATFORMS = [
 	["instagram", "Instagram", "📸"] as const,
@@ -20,27 +20,49 @@ export default function SocialHandles({
 	onAdd: (platform: string, value: string) => void;
 	onRemove: (platform: string, index: number) => void;
 }) {
-	// Merge passed platforms with icon data
-	const resolvedPlatforms = (platforms ?? DEFAULT_PLATFORMS).map(
+	const suggestedPlatforms = (platforms ?? DEFAULT_PLATFORMS).map(
 		([k, label]) => {
 			const match = DEFAULT_PLATFORMS.find(([dk]) => dk === k);
-			return [k, label, match ? match[2] : "•"] as [string, string, string];
+			return [k, label, match ? match[2] : "•"] as const;
 		},
 	);
 
-	const [pending, setPending] = useState<Record<string, string>>(
-		() =>
-			Object.fromEntries(resolvedPlatforms.map(([k]) => [k, ""])) as Record<
-				string,
-				string
-			>,
-	);
+	const [platformInput, setPlatformInput] = useState("");
+	const [valueInput, setValueInput] = useState("");
 
-	const commit = (k: string) => {
-		const raw = String(pending[k] ?? "").trim();
-		if (!raw) return;
-		onAdd(k, raw);
-		setPending((p) => ({ ...p, [k]: "" }));
+	const normalizePlatform = (value: string) =>
+		String(value ?? "")
+			.trim()
+			.toLowerCase()
+			.replace(/\s+/g, "_");
+
+	const entries = useMemo(() => {
+		const list: Array<{ platform: string; value: string; index: number }> = [];
+		for (const [platform, values] of Object.entries(socials ?? {})) {
+			if (!Array.isArray(values)) continue;
+			values.forEach((value, index) => {
+				const trimmed = String(value ?? "").trim();
+				if (!trimmed) return;
+				list.push({
+					platform,
+					value: trimmed,
+					index,
+				});
+			});
+		}
+		return list.sort((a, b) => {
+			const pa = a.platform.localeCompare(b.platform);
+			if (pa !== 0) return pa;
+			return a.value.localeCompare(b.value);
+		});
+	}, [socials]);
+
+	const commit = () => {
+		const platform = normalizePlatform(platformInput);
+		const value = String(valueInput ?? "").trim();
+		if (!platform || !value) return;
+		onAdd(platform, value);
+		setValueInput("");
 	};
 
 	return (
@@ -132,62 +154,82 @@ export default function SocialHandles({
 				}
 			`}</style>
 
-			<div className="sh-grid">
-				{resolvedPlatforms.map(([k, label, icon]) => {
-					const list = (socials as any)?.[k] ?? [];
-					const inputId = `social-handle-${k}`;
-					return (
-						<div key={k} className="sh-platform">
-							<label className="sh-plat-label" htmlFor={inputId}>
-								<span className="sh-icon">{icon}</span>
-								{label}
-							</label>
-							<div className="sh-handles">
-								{list.length === 0 ? (
-									<span className="sh-empty">—</span>
-								) : (
-									list.map((v: string, idx: number) => (
-										<div key={k + idx} className="sh-handle-chip">
-											<span className="sh-handle-text">@{v}</span>
-											<button
-												type="button"
-												className="sh-remove"
-												onClick={() => onRemove(k, idx)}
-												aria-label={`Remove ${label} handle`}>
-												×
-											</button>
-										</div>
-									))
-								)}
-							</div>
-							<div className="sh-add-row">
-								<input
-									id={inputId}
-									className="sh-add-input"
-									placeholder="@handle or URL"
-									aria-label={`Add ${label} handle`}
-									value={pending[k] ?? ""}
-									onChange={(e) =>
-										setPending((p) => ({ ...p, [k]: e.target.value }))
-									}
-									onKeyDown={(e) => {
-										if (e.key === "Enter") {
-											e.preventDefault();
-											commit(k);
-										}
-									}}
-								/>
+			<div className="sh-platform">
+				<div className="sh-plat-label">Add social link</div>
+				<div className="sh-add-row">
+					<input
+						id="social-platform-input"
+						className="sh-add-input"
+						placeholder="Platform (e.g. instagram, bluesky, youtube)"
+						aria-label="Social platform"
+						value={platformInput}
+						onChange={(e) => setPlatformInput(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								commit();
+							}
+						}}
+					/>
+					<input
+						id="social-value-input"
+						className="sh-add-input"
+						placeholder="Link or handle"
+						aria-label="Social link or handle"
+						value={valueInput}
+						onChange={(e) => setValueInput(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								commit();
+							}
+						}}
+					/>
+					<button
+						type="button"
+						className="sh-add-btn"
+						aria-label="Add social link"
+						onClick={commit}>
+						Add
+					</button>
+				</div>
+
+				{suggestedPlatforms.length > 0 && (
+					<div className="mt-2 flex flex-wrap gap-1.5">
+						{suggestedPlatforms.map(([key, label, icon]) => (
+							<button
+								key={key}
+								type="button"
+								onClick={() => setPlatformInput(key)}
+								className="rounded border border-[#2e303a] bg-white/5 px-2 py-1 text-[11px] text-[#cbd5e1] hover:bg-white/10">
+								{icon} {label}
+							</button>
+						))}
+					</div>
+				)}
+
+				<div className="sh-handles mt-3">
+					{entries.length === 0 ? (
+						<span className="sh-empty">No social links yet.</span>
+					) : (
+						entries.map((entry) => (
+							<div
+								key={`${entry.platform}-${entry.index}-${entry.value}`}
+								className="sh-handle-chip">
+								<span className="sh-handle-text">
+									<strong>{entry.platform}</strong>: {entry.value}
+								</span>
 								<button
 									type="button"
-									className="sh-add-btn"
-									aria-label={`Add ${label} handle`}
-									onClick={() => commit(k)}>
-									Add
+									className="sh-remove"
+									onClick={() => onRemove(entry.platform, entry.index)}
+									aria-label={`Remove ${entry.platform} link`}>
+									×
 								</button>
 							</div>
-						</div>
-					);
-				})}
+						))
+					)}
+				</div>
 			</div>
 		</>
 	);
