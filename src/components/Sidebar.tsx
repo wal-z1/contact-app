@@ -8,60 +8,61 @@ import type { Person } from "../models/types";
 import { PeopleList } from "./PeopleList";
 import { DataManagement } from "./DataManagement";
 import { AddPersonModal } from "./AddPersonModal";
+import AIAgentPanel from "./AIAgentPanel";
 
 const SidebarHeader = memo(function SidebarHeader({
-  peopleCount,
-  visibleCount,
+	peopleCount,
+	visibleCount,
 }: {
-  peopleCount: number;
-  visibleCount: number;
+	peopleCount: number;
+	visibleCount: number;
 }) {
-  return (
-    <>
-      <div className="rm-shell-title">
-        <div className="rm-shell-kicker">Workspace</div>
-        <div className="rm-shell-heading">People manager</div>
-        <div className="rm-shell-sub">
-          Add contacts, filter by year, and import/export your local data.
-        </div>
-      </div>
-      <div className="rm-stats" aria-label="Data summary">
-        <div className="rm-stat">
-          <div className="rm-stat-label">People</div>
-          <div className="rm-stat-value">{peopleCount}</div>
-        </div>
-        <div className="rm-stat">
-          <div className="rm-stat-label">Visible list</div>
-          <div className="rm-stat-value">{visibleCount}</div>
-        </div>
-      </div>
-    </>
-  );
+	return (
+		<>
+			<div className="rm-shell-title">
+				<div className="rm-shell-kicker">Workspace</div>
+				<div className="rm-shell-heading">People manager</div>
+				<div className="rm-shell-sub">
+					Add contacts, filter by year, and import/export your local data.
+				</div>
+			</div>
+			<div className="rm-stats" aria-label="Data summary">
+				<div className="rm-stat">
+					<div className="rm-stat-label">People</div>
+					<div className="rm-stat-value">{peopleCount}</div>
+				</div>
+				<div className="rm-stat">
+					<div className="rm-stat-label">Visible list</div>
+					<div className="rm-stat-value">{visibleCount}</div>
+				</div>
+			</div>
+		</>
+	);
 });
 
 export default function Sidebar() {
-  const people = useLiveQuery<Person[]>(() => db.people.toArray(), []) ?? [];
-  const activeYear = useAppStore((s) => s.activeYear);
-  const setActiveYear = useAppStore((s) => s.setActiveYear);
+	const people = useLiveQuery<Person[]>(() => db.people.toArray(), []) ?? [];
+	const activeYear = useAppStore((s) => s.activeYear);
+	const setActiveYear = useAppStore((s) => s.setActiveYear);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+	const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const yearOptions = useMemo(() => {
-    const yrs = new Set(people.map((p) => p.year).filter(Boolean));
-    return [...yrs].sort((a, b) => b - a);
-  }, [people]);
+	const yearOptions = useMemo(() => {
+		const yrs = new Set(people.map((p) => p.year).filter(Boolean));
+		return [...yrs].sort((a, b) => b - a);
+	}, [people]);
 
-  const visibleCount = useMemo(
-    () =>
-      people.filter((p) =>
-        activeYear === "all" ? true : p.year === activeYear,
-      ).length,
-    [people, activeYear],
-  );
+	const visibleCount = useMemo(
+		() =>
+			people.filter((p) =>
+				activeYear === "all" ? true : p.year === activeYear,
+			).length,
+		[people, activeYear],
+	);
 
-  return (
-    <>
-      <style>{`
+	return (
+		<>
+			<style>{`
         /* ----------------------------------------------
            Base theme variables (matching store defaults)
         ---------------------------------------------- */
@@ -321,55 +322,55 @@ export default function Sidebar() {
         }
       `}</style>
 
-      <div className="rm-sidebar flex h-full w-full flex-col gap-4 overflow-y-auto p-4">
-        <SidebarHeader
-          peopleCount={people.length}
-          visibleCount={visibleCount}
-        />
+			<div className="rm-sidebar flex h-full w-full flex-col gap-4 overflow-y-auto p-4">
+				<SidebarHeader
+					peopleCount={people.length}
+					visibleCount={visibleCount}
+				/>
 
-        <div className="rm-toolbar">
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="rm-sidebar-btn primary"
-            aria-label="Open add person dialog"
-          >
-            <span style={{ fontSize: 15 }}>＋</span> Add person
-          </button>
+				<div className="rm-toolbar">
+					<button
+						type="button"
+						onClick={() => setIsModalOpen(true)}
+						className="rm-sidebar-btn primary"
+						aria-label="Open add person dialog">
+						<span style={{ fontSize: 15 }}>＋</span> Add person
+					</button>
 
-          <DataManagement />
+					<DataManagement />
 
-          <div className="rm-filter-row">
-            <label className="rm-filter-label" htmlFor="rm-active-year">
-              Year filter
-            </label>
-            <select
-              id="rm-active-year"
-              value={activeYear === "all" ? "all" : String(activeYear)}
-              onChange={(e) =>
-                setActiveYear(
-                  e.target.value === "all" ? "all" : Number(e.target.value)
-                )
-              }
-              className="rm-year-select"
-            >
-              <option value="all">All years</option>
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+					<AIAgentPanel />
 
-        <PeopleList people={people} activeYear={activeYear} />
-      </div>
+					<div className="rm-filter-row">
+						<label className="rm-filter-label" htmlFor="rm-active-year">
+							Year filter
+						</label>
+						<select
+							id="rm-active-year"
+							value={activeYear === "all" ? "all" : String(activeYear)}
+							onChange={(e) =>
+								setActiveYear(
+									e.target.value === "all" ? "all" : Number(e.target.value),
+								)
+							}
+							className="rm-year-select">
+							<option value="all">All years</option>
+							{yearOptions.map((y) => (
+								<option key={y} value={y}>
+									{y}
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
 
-      <AddPersonModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
-    </>
-  );
+				<PeopleList people={people} activeYear={activeYear} />
+			</div>
+
+			<AddPersonModal
+				isOpen={isModalOpen}
+				onClose={() => setIsModalOpen(false)}
+			/>
+		</>
+	);
 }

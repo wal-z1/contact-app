@@ -64,6 +64,24 @@ npm run dev
 
 3. Open the printed local URL (typically `http://localhost:5173`).
 
+## AI Agent Setup (Gemini)
+
+The app includes an `AI Agent (Gemini)` panel in the left sidebar for simple data changes.
+
+1. Create a file named `.env.local` in the project root.
+2. Add your Google AI Studio key:
+
+```bash
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+3. Restart the dev server after changing env values.
+
+Notes:
+
+1. `VITE_` env variables are exposed to the browser bundle in Vite.
+2. For production, move Gemini calls behind a backend endpoint if you need to keep keys private.
+
 ### Production Build
 
 1. Build:
