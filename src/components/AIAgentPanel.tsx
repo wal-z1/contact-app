@@ -53,6 +53,16 @@ type BatchReviewState = {
 
 type AgentAction =
 	| {
+			action: "bulk_add_tag_to_people";
+			args: { sourceTagName?: string; tagName?: string };
+			message?: string;
+	  }
+	| {
+			action: "bulk_remove_relationship_type";
+			args: { type?: string };
+			message?: string;
+	  }
+	| {
 			action: "create_person";
 			args: {
 				name?: string;
@@ -572,6 +582,7 @@ const COMMAND_SYSTEM_PROMPT = [
 	"",
 	"Supported actions:",
 	"- create_person: args: { name, year?, email?, phone?, location?, description? }",
+	"- bulk_add_tag_to_people: args: { sourceTagName, tagName } — add tagName to every person who already has sourceTagName.",
 	"- update_person: args: { personName, patch: { ...fields } }",
 	"- bulk_update_people: args: { tagName, patch: { ...fields } }",
 	"- bulk_link_people_by_tag: args: { tagName, type }",
@@ -580,11 +591,19 @@ const COMMAND_SYSTEM_PROMPT = [
 	"- remove_tag_from_people: args: { personNames: string[], tagName } — remove a tag from multiple specific named people.",
 	"- link_people: args: { fromName, toName, type }",
 	"- bulk_remove_tag: args: { tagName } — remove a tag from ALL people who currently have it.",
+	"- bulk_remove_relationship_type: args: { type } — remove ALL relationships whose relationship type matches this value.",
+
 	"- none: args: {}",
 	"- multi_update_people: args: { personNames: string[], patch: { ...fields } }  — use when the same patch applies to multiple specific named people.",
 	"",
 	"- remove_tag_from_person: args: { personName, tagName } — remove a single tag from a specific person.",
 	"Rules:",
+	"- If the user says 'add <newTag> tag to everyone that has <existingTag> tag', use bulk_add_tag_to_people.",
+	"- Do NOT use bulk_link_people_by_tag for tag assignment.",
+	"- bulk_link_people_by_tag is only for creating relationships between people, not for adding tags.",
+	"- 'relationship type' refers to db.relationships.type, not tags.",
+	"- If the user says 'remove <x> relationship type from everyone' or 'delete all <x> relationships', use bulk_remove_relationship_type.",
+	"- Only use bulk_remove_tag when the user explicitly asks to remove a tag.",
 	"- Use exact person names from the provided people list.",
 	"- Tags are stored as IDs in args.patch.inrete[].",
 	"- Social links go in args.patch.socials (keys: instagram, linkedin, twitter, github, mastodon, website, facebook).",
@@ -1109,6 +1128,31 @@ export default function AIAgentPanel() {
 				return;
 			}
 
+			if (action.action === "bulk_remove_relationship_type") {
+				const type = sanitizeString(action.args?.type);
+				if (!type)
+					throw new Error("bulk_remove_relationship_type missing type.");
+
+				const matches = await db.relationships
+					.filter((r: any) => String(r.type ?? "").trim() === type)
+					.toArray();
+
+				if (matches.length === 0) {
+					setResult(`No relationships found with type "${type}".`);
+					setError(false);
+					return;
+				}
+
+				const ids = matches.map((r: any) => r.id).filter(Boolean);
+				await db.relationships.bulkDelete(ids);
+
+				setResult(
+					action.message ||
+						`Removed ${ids.length} relationships of type "${type}".`,
+				);
+				setError(false);
+				return;
+			}
 			// ── bulk_update_people ────────────────────────────────────────
 
 			if (action.action === "bulk_update_people") {
@@ -1226,7 +1270,55 @@ export default function AIAgentPanel() {
 				setError(false);
 				return;
 			}
+			if (action.action === "bulk_add_tag_to_people") {
+				const sourceTagName = sanitizeString(action.args?.sourceTagName);
+				const tagName = sanitizeString(action.args?.tagName);
 
+				if (!sourceTagName)
+					throw new Error("bulk_add_tag_to_people missing sourceTagName.");
+				if (!tagName)
+					throw new Error("bulk_add_tag_to_people missing tagName.");
+
+				const sourceNormalized = normalizeTag(sourceTagName);
+				const sourceTag = tags.find(
+					(t) =>
+						normalizeTag(t.normalized || t.name) === sourceNormalized ||
+						normalizeTag(t.name) === sourceNormalized,
+				);
+
+				if (!sourceTag)
+					throw new Error(`Could not find source tag "${sourceTagName}".`);
+
+				const targetTag = await ensureTag(tagName);
+
+				const matchedPeople = people.filter((p) =>
+					Array.isArray(p.inrete) ? p.inrete.includes(sourceTag.id) : false,
+				);
+
+				if (matchedPeople.length === 0)
+					throw new Error(`No people found with tag "${sourceTag.name}".`);
+
+				let updated = 0;
+
+				for (const person of matchedPeople) {
+					const currentInrete = Array.isArray(person.inrete)
+						? person.inrete
+						: [];
+					if (currentInrete.includes(targetTag.id)) continue;
+
+					await updatePerson(person.id, {
+						inrete: [...currentInrete, targetTag.id],
+					});
+					updated++;
+				}
+
+				setResult(
+					action.message ||
+						`Added tag "${targetTag.name}" to ${updated} people with tag "${sourceTag.name}".`,
+				);
+				setError(false);
+				return;
+			}
 			// ── bulk_link_people_by_tag ───────────────────────────────────
 
 			if (action.action === "bulk_link_people_by_tag") {
