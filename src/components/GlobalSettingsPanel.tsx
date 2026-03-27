@@ -29,17 +29,36 @@ export default function GlobalSettingsPanel() {
 	// New state for tag searching
 	const [tagSearchQuery, setTagSearchQuery] = useState("");
 
+	// Pagination state for tags
+	const [currentPage, setCurrentPage] = useState(1);
+	const itemsPerPage = 10;
+
 	// Filter tags based on the search query
 	const filteredTags = (tags ?? []).filter((t) =>
 		(t.name || "").toLowerCase().includes(tagSearchQuery.toLowerCase()),
 	);
+
+	// Paginated tags
+	const totalPages = Math.ceil(filteredTags.length / itemsPerPage);
+	const paginatedTags = filteredTags.slice(
+		(currentPage - 1) * itemsPerPage,
+		currentPage * itemsPerPage,
+	);
+
+	// Reset to first page when search query changes
+	const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		setTagSearchQuery(e.target.value);
+		setCurrentPage(1);
+	};
 
 	return (
 		<div className="h-full w-full flex flex-col overflow-hidden text-[14px] text-(--text)">
 			<div className="flex-1 overflow-y-auto pb-8 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-(--border) [&::-webkit-scrollbar-thumb]:rounded-sm">
 				<div className="px-5 mt-5">
 					<div className="flex items-center justify-between pb-2 border-b border-(--border) mb-3">
-						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">Saved events</span>
+						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">
+							Saved events
+						</span>
 						<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px]">
 							{(savedEvents ?? []).length}
 						</span>
@@ -48,13 +67,13 @@ export default function GlobalSettingsPanel() {
 						Manage event templates stored in the database.
 					</p>
 					{(savedEvents ?? []).length === 0 ? (
-						<p className="text-xs text-[#4b5563] italic py-1">No saved events yet.</p>
+						<p className="text-xs text-[#4b5563] italic py-1">
+							No saved events yet.
+						</p>
 					) : (
 						<div className="flex flex-col gap-2">
 							{(savedEvents ?? []).map((ev: any) => (
-								<div
-									key={ev.id}
-									className="flex items-center gap-2">
+								<div key={ev.id} className="flex items-center gap-2">
 									<div className="flex-1">
 										<strong>{ev.title}</strong>
 										<div className="text-xs text-[#9ca3af]">
@@ -195,8 +214,12 @@ export default function GlobalSettingsPanel() {
 
 				<div className="px-5 mt-[18px]">
 					<div className="flex items-center justify-between pb-2 border-b border-[color:var(--border)] mb-3">
-						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">Tags</span>
-						<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px]">{(tags ?? []).length}</span>
+						<span className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)]">
+							Tags
+						</span>
+						<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px]">
+							{(tags ?? []).length}
+						</span>
 					</div>
 					<p className="text-[11px] leading-[1.45] text-[color:var(--text)] mb-2.5">
 						Manage global tags and their names. Deleting a tag will remove it
@@ -210,7 +233,7 @@ export default function GlobalSettingsPanel() {
 								className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
 								placeholder="Search tags..."
 								value={tagSearchQuery}
-								onChange={(e) => setTagSearchQuery(e.target.value)}
+								onChange={handleSearchChange}
 							/>
 						</div>
 					)}
@@ -220,107 +243,130 @@ export default function GlobalSettingsPanel() {
 							{tagSearchQuery ? "No tags match your search." : "No tags yet."}
 						</p>
 					) : (
-						<div className="flex flex-col gap-2">
-							{filteredTags.map((t) => (
-								<div
-									key={t.id}
-									className="flex gap-2 items-center">
-									{editingTagId === t.id ? (
-										<>
-											<input
-												className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
-												value={editingTagName}
-												onChange={(e) => setEditingTagName(e.target.value)}
-											/>
-											<button
-												className="bg-[color:var(--accent)] border-none rounded-[7px] py-[9px] px-4 text-xs font-bold text-white cursor-pointer w-full transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
-												onClick={async () => {
-													try {
-														await db.tags.update(t.id, {
-															name: editingTagName,
-															normalized: String(editingTagName)
-																.trim()
-																.toLowerCase()
-																.replace(/\s+/g, "_"),
-														});
-													} catch (e) {
-														console.error(e);
-													}
-													setEditingTagId(null);
-													setEditingTagName("");
-												}}>
-												Save
-											</button>
-											<button
-												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
-												onClick={() => {
-													setEditingTagId(null);
-													setEditingTagName("");
-												}}>
-												Cancel
-											</button>
-										</>
-									) : (
-										<>
-											<div className="flex-1">{t.name}</div>
-											<button
-												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
-												onClick={() => {
-													setEditingTagId(t.id);
-													setEditingTagName(t.name);
-												}}>
-												Rename
-											</button>
-											<button
-												className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
-												onClick={async () => {
-													if (
-														!confirm(
-															"Delete this tag and remove it from all people?",
+						<>
+							<div className="flex flex-col gap-2">
+								{paginatedTags.map((t) => (
+									<div key={t.id} className="flex gap-2 items-center">
+										{editingTagId === t.id ? (
+											<>
+												<input
+													className="bg-white/5 border border-[color:var(--border)] rounded-[7px] py-2 px-2.5 text-[13px] text-[color:var(--text-h)] w-full box-border transition-colors duration-150 placeholder:text-white/20 focus:outline-none focus:border-[color:var(--accent)] focus:bg-[rgba(var(--accent-rgb),0.05)]"
+													value={editingTagName}
+													onChange={(e) => setEditingTagName(e.target.value)}
+												/>
+												<button
+													className="bg-[color:var(--accent)] border-none rounded-[7px] py-[9px] px-4 text-xs font-bold text-white cursor-pointer w-full transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
+													onClick={async () => {
+														try {
+															await db.tags.update(t.id, {
+																name: editingTagName,
+																normalized: String(editingTagName)
+																	.trim()
+																	.toLowerCase()
+																	.replace(/\s+/g, "_"),
+															});
+														} catch (e) {
+															console.error(e);
+														}
+														setEditingTagId(null);
+														setEditingTagName("");
+													}}>
+													Save
+												</button>
+												<button
+													className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
+													onClick={() => {
+														setEditingTagId(null);
+														setEditingTagName("");
+													}}>
+													Cancel
+												</button>
+											</>
+										) : (
+											<>
+												<div className="flex-1">{t.name}</div>
+												<button
+													className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
+													onClick={() => {
+														setEditingTagId(t.id);
+														setEditingTagName(t.name);
+													}}>
+													Rename
+												</button>
+												<button
+													className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-2 px-[14px] text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
+													onClick={async () => {
+														if (
+															!confirm(
+																"Delete this tag and remove it from all people?",
+															)
 														)
-													)
-														return;
-													try {
-														await db.transaction(
-															"rw",
-															db.tags,
-															db.people,
-															async () => {
-																await db.people
-																	.toArray()
-																	.then(async (peopleList) => {
-																		for (const p of peopleList) {
-																			const inrete = Array.isArray(
-																				(p as any).inrete,
-																			)
-																				? (p as any).inrete.filter(
-																						(id: string) => id !== t.id,
-																					)
-																				: [];
-																			if (
-																				inrete.length !==
-																				((p as any).inrete ?? []).length
-																			) {
-																				await db.people.update(p.id, {
-																					inrete,
-																				});
+															return;
+														try {
+															await db.transaction(
+																"rw",
+																db.tags,
+																db.people,
+																async () => {
+																	await db.people
+																		.toArray()
+																		.then(async (peopleList) => {
+																			for (const p of peopleList) {
+																				const inrete = Array.isArray(
+																					(p as any).inrete,
+																				)
+																					? (p as any).inrete.filter(
+																							(id: string) => id !== t.id,
+																						)
+																					: [];
+																				if (
+																					inrete.length !==
+																					((p as any).inrete ?? []).length
+																				) {
+																					await db.people.update(p.id, {
+																						inrete,
+																					});
+																				}
 																			}
-																		}
-																	});
-																await db.tags.delete(t.id);
-															},
-														);
-													} catch (e) {
-														console.error(e);
-													}
-												}}>
-												Delete
-											</button>
-										</>
-									)}
+																		});
+																	await db.tags.delete(t.id);
+																},
+															);
+														} catch (e) {
+															console.error(e);
+														}
+													}}>
+													Delete
+												</button>
+											</>
+										)}
+									</div>
+								))}
+							</div>
+
+							{/* Pagination Controls */}
+							{totalPages > 1 && (
+								<div className="flex justify-between items-center mt-3 pt-2 border-t border-[#2e303a]">
+									<button
+										className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-1.5 px-3 text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
+										onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+										disabled={currentPage === 1}>
+										Previous
+									</button>
+									<span className="text-xs text-[#9ca3af]">
+										Page {currentPage} of {totalPages}
+									</span>
+									<button
+										className="bg-[rgba(255,255,255,0.04)] border border-[color:var(--border)] rounded-[7px] py-1.5 px-3 text-xs font-semibold text-[color:var(--text)] cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.07)] hover:text-[color:var(--text-h)] disabled:opacity-40 disabled:cursor-not-allowed"
+										onClick={() =>
+											setCurrentPage((p) => Math.min(totalPages, p + 1))
+										}
+										disabled={currentPage === totalPages}>
+										Next
+									</button>
 								</div>
-							))}
-						</div>
+							)}
+						</>
 					)}
 
 					<div className="mt-3 pt-3 border-t border-[#e5e7eb] flex gap-2">
@@ -342,11 +388,15 @@ export default function GlobalSettingsPanel() {
 										normalized: name.toLowerCase().replace(/\s+/g, "_"),
 									});
 									setNewTagName("");
-									// Optionally clear search to see the new tag
+									// If the new tag would be visible in the current search, reset to first page
 									if (
-										!name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+										name.toLowerCase().includes(tagSearchQuery.toLowerCase())
 									) {
+										setCurrentPage(1);
+									} else {
+										// If it doesn't match the search, clear search to show it
 										setTagSearchQuery("");
+										setCurrentPage(1);
 									}
 								} catch (e) {
 									console.error(e);

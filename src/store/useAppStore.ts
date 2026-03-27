@@ -1,16 +1,16 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
+import JSZip from "jszip";
 import type {
 	Event,
 	Person,
 	Relationship,
 	RelationshipType,
 	Socials,
-	TimelineEvent,
 	Tag,
 } from "../models/types";
 import { db } from "../db/db";
-import { DEFAULT_NODE_COLOR, isValidNodeColor } from "../utils/nodeColors";
+import { DEFAULT_NODE_COLOR } from "../utils/nodeColors";
 
 type ActiveYear = number | "all";
 
@@ -23,11 +23,21 @@ export type Theme = {
 	textMuted: string;
 };
 
-// This type is derived from the form state in the original component
 export type PersonFormData = Omit<Person, "id" | "inrete"> & {
 	inrete: string; // Raw comma-separated tags
 };
 
+// --- Formalized Backup Data Structures ---
+interface SingleFileBackupV1 {
+	version: 1;
+	exportedAt: string;
+	people: Person[];
+	relationships: Relationship[];
+	tags: Tag[];
+	events: Event[];
+}
+
+// Updated AppState with smarter import/export signatures
 type AppState = {
 	selectedPersonId: string | null;
 	activeYear: ActiveYear;
@@ -41,17 +51,19 @@ type AppState = {
 	setTheme: (patch: Partial<Theme>) => void;
 
 	addPerson: (overrides?: Partial<Omit<Person, "id">>) => Promise<string>;
-	// NEW: Abstracted person creation logic
 	createPerson: (formData: PersonFormData) => Promise<string>;
-	// NEW: Abstracted export logic
-	exportBackup: () => Promise<string>;
 	updatePerson: (id: string, patch: Partial<Person>) => Promise<void>;
 	createRelationship: (
 		from: string,
 		to: string,
 		type: RelationshipType,
 	) => Promise<string>;
-	importPeopleFromJson: (raw: unknown) => Promise<{
+
+	// ENHANCED: New signatures for export/import
+	exportBackup: (format?: "single-file" | "multi-file-zip") => Promise<string>;
+	importBackup: (
+		files: (Record<string, unknown> | SingleFileBackupV1)[],
+	) => Promise<{
 		added: number;
 		updated: number;
 		skipped: number;
@@ -63,14 +75,12 @@ type AppState = {
 	rightPanelWidth: number;
 	setRightPanelWidth: (w: number) => void;
 
-	// Manual review mode: walk through people sequentially
 	reviewMode: boolean;
 	reviewList: string[];
 	startManualReview: () => Promise<void>;
 	stopManualReview: () => void;
 	reviewNext: () => void;
 
-	// UI toggles
 	showLeftPanel: boolean;
 	setShowLeftPanel: (v: boolean) => void;
 	showRightPanel: boolean;
@@ -97,139 +107,15 @@ const normalizeTag = (value: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
-const toStringValue = (value: unknown) =>
-	typeof value === "string" ? value : "";
-
-const parseStringList = (value: unknown): string[] => {
-	if (Array.isArray(value)) {
-		return value.map((entry) => String(entry ?? "").trim()).filter(Boolean);
-	}
-	if (typeof value === "string") {
-		return value
-			.split(",")
-			.map((entry) => entry.trim())
-			.filter(Boolean);
-	}
-	return [];
-};
-
-const parseSocials = (value: unknown): Socials => {
-	const base = defaultSocials();
-	if (!isRecord(value)) return base;
-	return {
-		instagram: parseStringList(value.instagram),
-		linkedin: parseStringList(value.linkedin),
-		twitter: parseStringList(value.twitter),
-		github: parseStringList(value.github),
-		mastodon: parseStringList(value.mastodon),
-		website: parseStringList(value.website),
-	};
-};
-
-const parseEvents = (value: unknown): TimelineEvent[] => {
-	if (!Array.isArray(value)) return [];
-	const parsed: TimelineEvent[] = [];
-	for (const entry of value) {
-		if (!isRecord(entry)) continue;
-		const kind = entry.kind === "range" ? "range" : "date";
-		const note = toStringValue(entry.note).trim();
-		const date = toStringValue(entry.date).trim();
-		const startDate = toStringValue(entry.startDate).trim();
-		const endDate = toStringValue(entry.endDate).trim();
-		const sourceId = toStringValue(entry.sourceId).trim();
-		if (kind === "date" && !date && !note) continue;
-		if (kind === "range" && !startDate && !endDate && !note) continue;
-		parsed.push({
-			id: toStringValue(entry.id).trim() || nanoid(),
-			kind,
-			note,
-			date: kind === "date" ? date : undefined,
-			startDate: kind === "range" ? startDate : undefined,
-			endDate: kind === "range" ? endDate : undefined,
-			sourceId: sourceId || undefined,
-		});
-	}
-	return parsed;
-};
-
-const toImportRecords = (raw: unknown): Record<string, unknown>[] => {
-	if (Array.isArray(raw)) return raw.filter(isRecord);
-	if (!isRecord(raw)) return [];
-	const people = raw.people;
-	if (Array.isArray(people)) return people.filter(isRecord);
-	return [];
-};
-
-const parseRelationships = (raw: unknown): Relationship[] => {
-	if (!isRecord(raw) || !Array.isArray(raw.relationships)) return [];
-	const parsed: Relationship[] = [];
-	for (const entry of raw.relationships) {
-		if (!isRecord(entry)) continue;
-		const from = toStringValue(entry.from).trim();
-		const to = toStringValue(entry.to).trim();
-		const type = toStringValue(entry.type).trim();
-		if (!from || !to || !type) continue;
-		parsed.push({
-			id: toStringValue(entry.id).trim() || nanoid(),
-			from,
-			to,
-			type,
-		});
-	}
-	return parsed;
-};
-
-const parseSavedEvents = (raw: unknown): Event[] => {
-	if (!isRecord(raw) || !Array.isArray(raw.events)) return [];
-	const parsed: Event[] = [];
-	for (const entry of raw.events) {
-		if (!isRecord(entry)) continue;
-		const title = toStringValue(entry.title).trim();
-		const kind = entry.kind === "range" ? "range" : "date";
-		const date = toStringValue(entry.date).trim();
-		const startDate = toStringValue(entry.startDate).trim();
-		const endDate = toStringValue(entry.endDate).trim();
-		if (!title && !date && !startDate && !endDate) continue;
-		parsed.push({
-			id: toStringValue(entry.id).trim() || nanoid(),
-			title: title || "Event",
-			kind,
-			date: date || undefined,
-			startDate: startDate || undefined,
-			endDate: endDate || undefined,
-			note: toStringValue(entry.note).trim() || undefined,
-		});
-	}
-	return parsed;
-};
-
-const parseTags = (raw: unknown): Tag[] => {
-	if (!isRecord(raw) || !Array.isArray(raw.tags)) return [];
-	const parsed: Tag[] = [];
-	for (const entry of raw.tags) {
-		if (typeof entry === "string") {
-			const name = entry.trim();
-			if (!name) continue;
-			parsed.push({
-				id: nanoid(),
-				name,
-				normalized: normalizeTag(name),
-			});
-			continue;
-		}
-		if (!isRecord(entry)) continue;
-		const name = toStringValue(entry.name).trim();
-		if (!name) continue;
-		const normalized = normalizeTag(
-			toStringValue(entry.normalized).trim() || name,
-		);
-		parsed.push({
-			id: toStringValue(entry.id).trim() || nanoid(),
-			name,
-			normalized,
-		});
-	}
-	return parsed;
+const downloadBlob = (fileName: string, blob: Blob) => {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = fileName;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
 };
 
 const getDefaultPersonValues = (activeYear: ActiveYear): Omit<Person, "id"> => {
@@ -279,18 +165,74 @@ const getDebouncedUpdate = (id: string) => {
 	return updateDebounceMap.get(id)!;
 };
 
-// Helper to trigger browser download
-const downloadJson = (fileName: string, payload: unknown) => {
-	const blob = new Blob([JSON.stringify(payload, null, 2)], {
-		type: "application/json",
-	});
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = fileName;
-	a.click();
-	URL.revokeObjectURL(url);
-};
+// --- Decomposed & Efficient Import Logic Helpers ---
+
+async function importTags(
+	importedTags: Tag[],
+	tagsTable: typeof db.tags,
+): Promise<{ idMap: Map<string, string>; stats: { added: number } }> {
+	if (!importedTags.length) return { idMap: new Map(), stats: { added: 0 } };
+
+	const existingTags = await tagsTable.toArray();
+	const existingByNormalized = new Map(
+		existingTags.map((t) => [t.normalized, t]),
+	);
+	const idMap = new Map<string, string>();
+	const tagsToAdd: Tag[] = [];
+
+	for (const tag of importedTags) {
+		const existing = existingByNormalized.get(tag.normalized);
+		if (existing) {
+			idMap.set(tag.id, existing.id);
+		} else {
+			const newId = nanoid();
+			idMap.set(tag.id, newId);
+			tagsToAdd.push({ ...tag, id: newId });
+			existingByNormalized.set(tag.normalized, { ...tag, id: newId });
+		}
+	}
+
+	if (tagsToAdd.length > 0) {
+		await tagsTable.bulkAdd(tagsToAdd);
+	}
+
+	return { idMap, stats: { added: tagsToAdd.length } };
+}
+
+async function importPeople(
+	importedPeople: Person[],
+	tagIdMap: Map<string, string>,
+	peopleTable: typeof db.people,
+): Promise<{ added: number; updated: number }> {
+	if (!importedPeople.length) return { added: 0, updated: 0 };
+
+	const peopleToPut = importedPeople.map((person) => ({
+		...person,
+		inrete: person.inrete
+			.map((oldId) => tagIdMap.get(oldId))
+			.filter((newId): newId is string => !!newId),
+	}));
+
+	const existingIds = new Set(
+		(await peopleTable.bulkGet(peopleToPut.map((p) => p.id)))
+			.filter(Boolean)
+			.map((p) => p!.id),
+	);
+
+	await peopleTable.bulkPut(peopleToPut);
+
+	const added = peopleToPut.filter((p) => !existingIds.has(p.id)).length;
+	return { added, updated: peopleToPut.length - added };
+}
+
+async function importGeneric<T extends { id: string }>(
+	items: T[],
+	table: { bulkPut: (items: T[]) => any },
+): Promise<{ imported: number }> {
+	if (!items.length) return { imported: 0 };
+	await table.bulkPut(items);
+	return { imported: items.length };
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
 	selectedPersonId: null,
@@ -412,7 +354,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 		const initialYear =
 			typeof activeYear === "number" ? activeYear : new Date().getFullYear();
 
-		// Logic for finding or creating tags
 		const requestedTags = formData.inrete
 			.split(",")
 			.map((s) => s.trim())
@@ -441,7 +382,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 			tagIds.push(id);
 		}
 
-		// Create the final person object
 		const personPayload: Omit<Person, "id"> = {
 			name: formData.name.trim(),
 			year: Number(formData.year) || initialYear,
@@ -454,7 +394,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 			location: (formData.location ?? "").trim(),
 			socials: formData.socials,
 			inrete: tagIds,
-			// Defaults for fields not in form
 			nodeColor: DEFAULT_NODE_COLOR,
 			events: [],
 		};
@@ -465,45 +404,57 @@ export const useAppStore = create<AppState>((set, get) => ({
 		return personId;
 	},
 
-	exportBackup: async () => {
-		const [allPeople, allRelationships, allTags, allEvents] = await Promise.all(
-			[
-				db.people.toArray(),
-				db.relationships.toArray(),
-				db.tags.toArray(),
-				db.events.toArray(),
-			],
-		);
+	exportBackup: async (format = "single-file") => {
+		const [people, relationships, tags, events] = await Promise.all([
+			db.people.toArray(),
+			db.relationships.toArray(),
+			db.tags.toArray(),
+			db.events.toArray(),
+		]);
 
-		const tagsById = new Map<string, string>();
-		for (const tag of allTags) {
-			if (!tag?.id) continue;
-			const normalized = String(tag.normalized ?? "").trim();
-			const name = String(tag.name ?? "").trim();
-			tagsById.set(tag.id, normalized || name);
+		if (format === "multi-file-zip") {
+			const zip = new JSZip();
+			zip.file(
+				"tags.json",
+				JSON.stringify({ type: "tags", version: 1, data: tags }, null, 2),
+			);
+			zip.file(
+				"people.json",
+				JSON.stringify({ type: "people", version: 1, data: people }, null, 2),
+			);
+			zip.file(
+				"relationships.json",
+				JSON.stringify(
+					{ type: "relationships", version: 1, data: relationships },
+					null,
+					2,
+				),
+			);
+			zip.file(
+				"events.json",
+				JSON.stringify({ type: "events", version: 1, data: events }, null, 2),
+			);
+
+			const blob = await zip.generateAsync({ type: "blob" });
+			downloadBlob("relationship-map-backup.zip", blob);
+		} else {
+			const backupData: SingleFileBackupV1 = {
+				version: 1,
+				exportedAt: new Date().toISOString(),
+				people,
+				relationships,
+				tags,
+				events,
+			};
+			const blob = new Blob([JSON.stringify(backupData, null, 2)], {
+				type: "application/json",
+			});
+			downloadBlob("relationship-map-backup.json", blob);
 		}
 
-		const peopleForBackup = allPeople.map((person) => {
-			const inreteIds = Array.isArray(person.inrete) ? person.inrete : [];
-			const inrete = inreteIds
-				.map((tagId) => tagsById.get(tagId) ?? String(tagId ?? "").trim())
-				.filter(Boolean);
-			return { ...person, inrete };
-		});
-
-		downloadJson("relationship-map-backup.json", {
-			version: 1,
-			exportedAt: new Date().toISOString(),
-			people: peopleForBackup,
-			relationships: allRelationships,
-			tags: allTags,
-			events: allEvents,
-		});
-
-		return `Backup exported: ${allPeople.length} people, ${allRelationships.length} relationships.`;
+		return `Backup exported: ${people.length} people, ${relationships.length} relationships.`;
 	},
 
-	// Debounced at store level as a safety net; primary debouncing is in PersonPanel
 	updatePerson: async (id, patch) => {
 		const debouncedWrite = getDebouncedUpdate(id);
 		debouncedWrite(patch);
@@ -516,24 +467,64 @@ export const useAppStore = create<AppState>((set, get) => ({
 		return id;
 	},
 
-	importPeopleFromJson: async (raw) => {
-		const records = toImportRecords(raw);
-		if (records.length === 0) {
-			throw new Error(
-				"JSON must be an array of people or an object with a people array.",
-			);
+	importBackup: async (files) => {
+		let data: {
+			people: Person[];
+			relationships: Relationship[];
+			tags: Tag[];
+			events: Event[];
+		} = { people: [], relationships: [], tags: [], events: [] };
+
+		if (files.length === 1 && "people" in files[0] && "version" in files[0]) {
+			const backup = files[0] as SingleFileBackupV1;
+			data = {
+				people: backup.people || [],
+				relationships: backup.relationships || [],
+				tags: backup.tags || [],
+				events: backup.events || [],
+			};
+		} else {
+			for (const file of files) {
+				if (
+					isRecord(file) &&
+					typeof file.type === "string" &&
+					Array.isArray(file.data)
+				) {
+					switch (file.type) {
+						case "tags":
+							data.tags = file.data as Tag[];
+							break;
+						case "people":
+							data.people = file.data as Person[];
+							break;
+						case "relationships":
+							data.relationships = file.data as Relationship[];
+							break;
+						case "events":
+							data.events = file.data as Event[];
+							break;
+					}
+				}
+			}
 		}
 
-		const activeYear = get().activeYear;
-		const currentYear: number =
-			typeof activeYear === "number" ? activeYear : new Date().getFullYear();
+		if (
+			data.people.length === 0 &&
+			data.tags.length === 0 &&
+			data.relationships.length === 0 &&
+			data.events.length === 0
+		) {
+			throw new Error("No valid data found in the provided file(s).");
+		}
 
-		let added = 0;
-		let updated = 0;
-		let skipped = 0;
-		let relationshipsImported = 0;
-		let eventsImported = 0;
-		let tagsImported = 0;
+		const stats = {
+			added: 0,
+			updated: 0,
+			skipped: 0,
+			relationshipsImported: 0,
+			eventsImported: 0,
+			tagsImported: 0,
+		};
 
 		await db.transaction(
 			"rw",
@@ -542,155 +533,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 			db.relationships,
 			db.events,
 			async () => {
-				const tagsTable = db.tags;
-				const existingTags = await tagsTable.toArray();
-				const tagByNormalized = new Map<string, Tag>();
-				const tagById = new Map<string, Tag>();
-				const importedTagIdToResolvedId = new Map<string, string>();
-				for (const tag of existingTags) {
-					tagByNormalized.set(normalizeTag(tag.normalized ?? tag.name), tag);
-					tagById.set(tag.id, tag);
-				}
+				const { idMap, stats: tagStats } = await importTags(data.tags, db.tags);
+				stats.tagsImported = tagStats.added;
 
-				const importedTags = parseTags(raw);
-				for (const tag of importedTags) {
-					const normalized = normalizeTag(tag.normalized ?? tag.name);
-					if (!normalized) continue;
-					const byNormalized = tagByNormalized.get(normalized);
-					if (byNormalized) {
-						if (tag.id) importedTagIdToResolvedId.set(tag.id, byNormalized.id);
-						continue;
-					}
+				const peopleStats = await importPeople(data.people, idMap, db.people);
+				stats.added = peopleStats.added;
+				stats.updated = peopleStats.updated;
 
-					let nextId = tag.id || nanoid();
-					if (tagById.has(nextId)) {
-						nextId = nanoid();
-					}
+				const relStats = await importGeneric(
+					data.relationships,
+					db.relationships,
+				);
+				stats.relationshipsImported = relStats.imported;
 
-					const created: Tag = {
-						id: nextId,
-						name: tag.name,
-						normalized,
-					};
-					await tagsTable.add(created);
-					tagByNormalized.set(normalized, created);
-					tagById.set(created.id, created);
-					if (tag.id) importedTagIdToResolvedId.set(tag.id, created.id);
-					tagsImported += 1;
-				}
-
-				for (const entry of records) {
-					const name = toStringValue(entry.name).trim();
-					if (!name) {
-						skipped += 1;
-						continue;
-					}
-
-					const rawId = toStringValue(entry.id).trim();
-					const personId = rawId || nanoid();
-
-					const parsedYear = Number(entry.year);
-					const year = Number.isFinite(parsedYear) ? parsedYear : currentYear;
-
-					const tagsInput = [
-						...parseStringList(entry.inrete),
-						...parseStringList(entry.tags),
-					];
-					const nextTagIds = new Set<string>();
-					for (const rawTagRef of tagsInput) {
-						const tagRef = String(rawTagRef ?? "").trim();
-						if (!tagRef) continue;
-
-						const resolvedImportedId = importedTagIdToResolvedId.get(tagRef);
-						if (resolvedImportedId) {
-							nextTagIds.add(resolvedImportedId);
-							continue;
-						}
-
-						const byId = tagById.get(tagRef);
-						if (byId) {
-							nextTagIds.add(byId.id);
-							continue;
-						}
-
-						const normalized = normalizeTag(tagRef);
-						if (!normalized) continue;
-						const existing = tagByNormalized.get(normalized);
-						if (existing) {
-							nextTagIds.add(existing.id);
-							continue;
-						}
-
-						const id = nanoid();
-						const created: Tag = { id, name: tagRef, normalized };
-						await tagsTable.add(created);
-						tagByNormalized.set(normalized, created);
-						tagById.set(id, created);
-						nextTagIds.add(id);
-						tagsImported += 1;
-					}
-
-					const person: Person = {
-						id: personId,
-						name,
-						nodeColor: isValidNodeColor(entry.nodeColor)
-							? entry.nodeColor
-							: DEFAULT_NODE_COLOR,
-						year,
-						description: toStringValue(entry.description).trim(),
-						firstInteraction: toStringValue(entry.firstInteraction).trim(),
-						lastInteraction: toStringValue(entry.lastInteraction).trim(),
-						lore: toStringValue(entry.lore).trim(),
-						email: toStringValue(entry.email).trim(),
-						phone: toStringValue(entry.phone).trim(),
-						location: toStringValue(entry.location).trim(),
-						inrete: Array.from(nextTagIds),
-						socials: parseSocials(entry.socials),
-						events: parseEvents(entry.events),
-					};
-
-					const exists = await db.people.get(personId);
-					if (exists) {
-						await db.people.update(personId, person);
-						updated += 1;
-					} else {
-						await db.people.add(person);
-						added += 1;
-					}
-				}
-
-				const importedEvents = parseSavedEvents(raw);
-				for (const event of importedEvents) {
-					const exists = await db.events.get(event.id);
-					if (exists) {
-						await db.events.update(event.id, event);
-					} else {
-						await db.events.add(event);
-					}
-					eventsImported += 1;
-				}
-
-				const importedRelationships = parseRelationships(raw);
-				for (const relationship of importedRelationships) {
-					const exists = await db.relationships.get(relationship.id);
-					if (exists) {
-						await db.relationships.update(relationship.id, relationship);
-					} else {
-						await db.relationships.add(relationship);
-					}
-					relationshipsImported += 1;
-				}
+				const eventStats = await importGeneric(data.events, db.events);
+				stats.eventsImported = eventStats.imported;
 			},
 		);
 
-		return {
-			added,
-			updated,
-			skipped,
-			relationshipsImported,
-			eventsImported,
-			tagsImported,
-		};
+		return stats;
 	},
 
 	rightPanelWidth: (() => {
@@ -720,7 +581,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 		}
 	},
 
-	// Manual review implementation
 	reviewMode: false,
 	reviewList: [],
 	startManualReview: async () => {
@@ -746,11 +606,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 			set({ selectedPersonId: list[idx + 1] });
 			return;
 		}
-		// finished
 		set({ reviewMode: false, reviewList: [], selectedPersonId: null });
 	},
 
-	// UI toggles default to true
 	showLeftPanel: true,
 	setShowLeftPanel: (v: boolean) => set({ showLeftPanel: Boolean(v) }),
 	showRightPanel: true,
