@@ -17,6 +17,34 @@ type PersonWithShape = Person & {
 	facebook?: string;
 };
 
+type BatchReviewMatch = {
+	input: string;
+	personId?: string;
+	personName?: string;
+	confidence?: number;
+	reason?: string;
+};
+
+type BatchReviewNewPerson = {
+	name?: string;
+	year?: number;
+	email?: string;
+	phone?: string;
+	location?: string;
+	description?: string;
+	instagram?: string;
+	tiktok?: string;
+	facebook?: string;
+};
+
+type BatchReviewState = {
+	message: string;
+	matches: BatchReviewMatch[];
+	possibleMatches: BatchReviewMatch[];
+	newPeople: BatchReviewNewPerson[];
+	rawInput?: string;
+};
+
 type AgentAction =
 	| {
 			action: "create_person";
@@ -43,6 +71,16 @@ type AgentAction =
 			args: {
 				tagName?: string;
 				patch?: Record<string, unknown>;
+			};
+			message?: string;
+	  }
+	| {
+			action: "review_people_batch";
+			args: {
+				matches?: BatchReviewMatch[];
+				possibleMatches?: BatchReviewMatch[];
+				newPeople?: BatchReviewNewPerson[];
+				rawInput?: string;
 			};
 			message?: string;
 	  }
@@ -262,6 +300,27 @@ function extractBulkTagYearRequest(text: string): {
 	};
 }
 
+function looksLikeLargeBatchInput(text: string): boolean {
+	const source = String(text ?? "").trim();
+	if (!source) return false;
+
+	const lines = source
+		.split("\n")
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+	const hasManyLines = lines.length >= 8;
+	const hasManyHandles =
+		(source.match(/@[a-z0-9._-]+/gi) ?? []).length >= 6;
+	const hasManyUrls = extractUrls(source).length >= 5;
+	const hasBulkWords =
+		/\b(followers|following|import|list|batch|paste|pasted|csv|usernames?)\b/i.test(
+			source,
+		);
+
+	return hasManyLines || hasManyHandles || hasManyUrls || hasBulkWords;
+}
+
 async function generateAgentAction(
 	apiKey: string,
 	payload: unknown,
@@ -312,6 +371,7 @@ export default function AIAgentPanel() {
 	const [running, setRunning] = useState(false);
 	const [result, setResult] = useState("");
 	const [error, setError] = useState(false);
+	const [batchReview, setBatchReview] = useState<BatchReviewState | null>(null);
 
 	const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 	const hasApiKey = Boolean(apiKey && apiKey.trim());
@@ -371,6 +431,69 @@ export default function AIAgentPanel() {
 		return newTag;
 	};
 
+	const handleApplyBatchCreateAll = async () => {
+		if (!batchReview?.newPeople?.length) return;
+
+		setRunning(true);
+		setError(false);
+
+		try {
+			for (const candidate of batchReview.newPeople) {
+				const name = sanitizeString(candidate.name);
+				if (!name) continue;
+
+				await addPerson({
+					name,
+					year: Number.isFinite(Number(candidate.year))
+						? Number(candidate.year)
+						: new Date().getFullYear(),
+					email: sanitizeString(candidate.email),
+					phone: sanitizeString(candidate.phone),
+					location: sanitizeString(candidate.location),
+					description: sanitizeString(candidate.description),
+					inrete: [],
+					socials: {
+						instagram: candidate.instagram
+							? [sanitizeString(candidate.instagram)].filter(Boolean)
+							: [],
+						linkedin: [],
+						twitter: [],
+						github: [],
+						mastodon: [],
+						website: [],
+						facebook: candidate.facebook
+							? [sanitizeString(candidate.facebook)].filter(Boolean)
+							: [],
+					},
+					tiktok: sanitizeString(candidate.tiktok),
+					facebook: sanitizeString(candidate.facebook),
+					events: [],
+				} as Parameters<typeof addPerson>[0]);
+			}
+
+			setResult(`Created ${batchReview.newPeople.length} new people.`);
+			setBatchReview(null);
+			setError(false);
+		} catch (err) {
+			setError(true);
+			setResult(err instanceof Error ? err.message : "Failed creating batch.");
+		} finally {
+			setRunning(false);
+		}
+	};
+
+	const handleSelectFirstMatch = () => {
+		if (!batchReview?.matches?.length) return;
+
+		const first = batchReview.matches[0];
+		if (!first.personId) return;
+
+		setSelectedPersonId(first.personId);
+		setResult(`Selected ${first.personName || "matched person"}.`);
+		setBatchReview(null);
+		setError(false);
+	};
+
 	const runAgent = async () => {
 		const userText = prompt.trim();
 		if (!userText) return;
@@ -386,11 +509,13 @@ export default function AIAgentPanel() {
 		setRunning(true);
 		setError(false);
 		setResult("Thinking...");
+		setBatchReview(null);
 
 		try {
 			const directTag = extractRequestedTag(userText);
 			const directSocials = extractSocialUpdates(userText);
 			const directBulkTagYear = extractBulkTagYearRequest(userText);
+			const isLargeBatch = looksLikeLargeBatchInput(userText);
 
 			if (
 				directBulkTagYear.tagName &&
@@ -433,11 +558,17 @@ export default function AIAgentPanel() {
 			const systemPrompt = [
 				"You are a contact-app command planner.",
 				"Return strict JSON only.",
-				"Schema: { action: 'create_person'|'update_person'|'bulk_update_people'|'select_person'|'link_people'|'none', args: object, message?: string }",
+				"Schema: { action: 'create_person'|'update_person'|'bulk_update_people'|'review_people_batch'|'select_person'|'link_people'|'none', args: object, message?: string }",
 				"Rules:",
 				"- Prefer 'none' when request is ambiguous.",
 				"- For update/select/link, use person names from provided people list.",
 				"- For bulk changes by tag, use action='bulk_update_people'.",
+				"- For large pasted lists, follower/following dumps, imports, batches, many usernames, or anything that looks like many people at once, use action='review_people_batch'.",
+				"- review_people_batch should NOT apply changes directly.",
+				"- review_people_batch args shape: { matches: [], possibleMatches: [], newPeople: [], rawInput?: string }",
+				"- matches should contain strong matches to existing people.",
+				"- possibleMatches should contain uncertain matches.",
+				"- newPeople should contain likely new person records to create.",
 				"- Never return markdown or explanations.",
 				"- This app stores tag references on a person in args.patch.inrete as an array of tag IDs.",
 				"- Global tags are separate records with fields id, name, normalized.",
@@ -447,6 +578,7 @@ export default function AIAgentPanel() {
 				"- If the user says 'this person', prefer the selected person.",
 				"- If the user asks to update all people with a given tag, return { action: 'bulk_update_people', args: { tagName: string, patch: {...} } }.",
 				"- If the user says known from year/years should become 2024, map that to patch.year = 2024.",
+				"- If input looks like a large list, do review_people_batch even if some matches are obvious.",
 			].join("\n");
 
 			const payload = {
@@ -475,6 +607,9 @@ ${JSON.stringify(peopleContext)}
 Global tags:
 ${JSON.stringify(tagsContext)}
 
+Large-batch hint:
+${JSON.stringify({ isLargeBatch })}
+
 User request:
 ${userText}`,
 							},
@@ -494,6 +629,34 @@ ${userText}`,
 				'{"action":"none","args":{},"message":"No change was applied."}';
 
 			const action = JSON.parse(unwrapJson(rawText)) as AgentAction;
+
+			if (action.action === "review_people_batch") {
+				const matches = Array.isArray(action.args?.matches)
+					? action.args.matches
+					: [];
+				const possibleMatches = Array.isArray(action.args?.possibleMatches)
+					? action.args.possibleMatches
+					: [];
+				const newPeople = Array.isArray(action.args?.newPeople)
+					? action.args.newPeople
+					: [];
+
+				setBatchReview({
+					message:
+						action.message ||
+						"Large input detected. Review matches and choose what to do.",
+					matches,
+					possibleMatches,
+					newPeople,
+					rawInput: sanitizeString(action.args?.rawInput),
+				});
+				setResult(
+					action.message ||
+						`Review ready: ${matches.length} strong matches, ${possibleMatches.length} possible matches, ${newPeople.length} new people.`,
+				);
+				setError(false);
+				return;
+			}
 
 			if (action.action === "create_person") {
 				const name = sanitizeString(action.args?.name);
@@ -795,8 +958,8 @@ ${userText}`,
 
 			<div className="mb-2 text-[12px] text-[color:var(--rm-text-muted)]">
 				Examples: "add tag saying nice to this person", "add these socials:
-				https://...", or "all ppl that have 1cp tag should update their known
-				from years to 2024"
+				https://...", "all ppl that have 1cp tag should update their known
+				from years to 2024", or paste a big follower list for review.
 			</div>
 
 			{selectedPerson && (
@@ -831,6 +994,68 @@ ${userText}`,
 					</span>
 				)}
 			</div>
+
+			{batchReview && (
+				<div className="mt-3 rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-[12px] text-sky-100">
+					<div className="mb-2 font-semibold">Review needed</div>
+					<div className="mb-2">{batchReview.message}</div>
+					<div className="mb-2">
+						Strong matches: {batchReview.matches.length} | Possible matches:{" "}
+						{batchReview.possibleMatches.length} | New people:{" "}
+						{batchReview.newPeople.length}
+					</div>
+
+					{batchReview.matches.length > 0 && (
+						<div className="mb-2">
+							<div className="mb-1 font-medium">Strong matches</div>
+							<div className="space-y-1">
+								{batchReview.matches.slice(0, 5).map((item, idx) => (
+									<div key={`${item.input}-${idx}`}>
+										{item.input} → {item.personName || item.personId || "match"}
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+
+					{batchReview.newPeople.length > 0 && (
+						<div className="mb-2">
+							<div className="mb-1 font-medium">New people candidates</div>
+							<div className="space-y-1">
+								{batchReview.newPeople.slice(0, 5).map((item, idx) => (
+									<div key={`${item.name || "new"}-${idx}`}>
+										{item.name || "Unnamed"}{" "}
+										{item.instagram ? `(${item.instagram})` : ""}
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+
+					<div className="mt-3 flex flex-wrap gap-2">
+						<button
+							type="button"
+							className="rm-sidebar-btn"
+							onClick={() => void handleApplyBatchCreateAll()}
+							disabled={running || batchReview.newPeople.length === 0}>
+							Create all new people
+						</button>
+						<button
+							type="button"
+							className="rm-sidebar-btn"
+							onClick={handleSelectFirstMatch}
+							disabled={batchReview.matches.length === 0}>
+							Select first strong match
+						</button>
+						<button
+							type="button"
+							className="rm-sidebar-btn"
+							onClick={() => setBatchReview(null)}>
+							Clear review
+						</button>
+					</div>
+				</div>
+			)}
 
 			{result && (
 				<div
