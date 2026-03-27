@@ -14,6 +14,110 @@ import SocialHandles from "./SocialHandles";
 
 type FormState = Omit<PersonFormData, "nodeColor" | "events">;
 
+type AiPersonDraft = Partial<FormState> & {
+	tags?: string[];
+};
+
+type GeminiGenerateContentResponse = {
+	candidates?: Array<{
+		content?: {
+			parts?: Array<{ text?: string }>;
+		};
+	}>;
+};
+
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+
+const ADD_PERSON_AI_PROMPT = [
+	"You extract person form data from natural language.",
+	"Return strict JSON only. No markdown. No explanations.",
+	"Schema:",
+	"{",
+	'  "name"?: string,',
+	'  "year"?: number,',
+	'  "description"?: string,',
+	'  "firstInteraction"?: string,',
+	'  "lastInteraction"?: string,',
+	'  "lore"?: string,',
+	'  "email"?: string,',
+	'  "phone"?: string,',
+	'  "location"?: string,',
+	'  "tags"?: string[],',
+	'  "socials"?: {',
+	'    "instagram"?: string[],',
+	'    "linkedin"?: string[],',
+	'    "twitter"?: string[],',
+	'    "github"?: string[],',
+	'    "mastodon"?: string[],',
+	'    "website"?: string[]',
+	"  }",
+	"}",
+	"Rules:",
+	"- Only extract fields for one person.",
+	"- tags must be plain tag names, not IDs.",
+	"- socials values must be arrays of strings.",
+	"- If a field is missing, omit it.",
+	"- Do not invent information.",
+	"- If text says @username and platform is Instagram, place it in socials.instagram.",
+].join("\n");
+
+function unwrapJson(text: string): string {
+	const trimmed = String(text ?? "").trim();
+	if (!trimmed) return "{}";
+	if (trimmed.startsWith("```") && trimmed.includes("\n")) {
+		return trimmed
+			.replace(/^```(?:json)?\s*/i, "")
+			.replace(/```$/i, "")
+			.trim();
+	}
+	return trimmed;
+}
+
+async function callGemini(
+	apiKey: string,
+	payload: unknown,
+): Promise<GeminiGenerateContentResponse> {
+	let lastError: Error | null = null;
+
+	for (const model of GEMINI_MODELS) {
+		const response = await fetch(
+			`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			},
+		);
+
+		if (response.ok) {
+			return (await response.json()) as GeminiGenerateContentResponse;
+		}
+
+		lastError = new Error(
+			`Gemini ${model} failed (${response.status}): ${await response.text()}`,
+		);
+	}
+
+	throw lastError ?? new Error("Gemini request failed.");
+}
+
+function cleanString(value: unknown): string {
+	return typeof value === "string" ? value.trim() : "";
+}
+
+function uniqueStrings(values: string[]): string[] {
+	return Array.from(
+		new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)),
+	);
+}
+
+function parseCommaSeparatedTags(value: string): string[] {
+	return String(value ?? "")
+		.split(",")
+		.map((item) => item.trim())
+		.filter(Boolean);
+}
+
 type FormFieldProps = ComponentProps<"input"> & { label: string; id: string };
 const FormField: FC<FormFieldProps> = ({ label, id, ...props }) => (
 	<div className="rm-field">
@@ -48,8 +152,17 @@ export default function AddPersonModal({
 }: AddPersonModalProps) {
 	const activeYear = useAppStore((s) => s.activeYear);
 	const createPerson = useAppStore((s) => s.createPerson);
+
 	const [loading, setLoading] = useState(false);
 	const [step, setStep] = useState<"basic" | "contact">("basic");
+
+	const [aiPrompt, setAiPrompt] = useState("");
+	const [aiLoading, setAiLoading] = useState(false);
+	const [aiResult, setAiResult] = useState("");
+	const [aiError, setAiError] = useState(false);
+
+	const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+	const hasApiKey = Boolean(apiKey && apiKey.trim());
 
 	const initialYear = useMemo(
 		() =>
@@ -85,6 +198,10 @@ export default function AddPersonModal({
 			setForm(emptyForm());
 			setStep("basic");
 			setLoading(false);
+			setAiPrompt("");
+			setAiLoading(false);
+			setAiResult("");
+			setAiError(false);
 		}
 	}, [isOpen, initialYear]);
 
@@ -113,8 +230,10 @@ export default function AddPersonModal({
 		}
 	};
 
-	const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-		if (e.key === "Enter" && step === "basic") {
+	const handleKeyDown = (
+		e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+	) => {
+		if (e.key === "Enter" && step === "basic" && !e.shiftKey) {
 			e.preventDefault();
 			if (form.name.trim()) setStep("contact");
 		}
@@ -139,7 +258,9 @@ export default function AddPersonModal({
 			if (
 				existing.some(
 					(entry) =>
-						String(entry ?? "").trim().toLowerCase() === value.toLowerCase(),
+						String(entry ?? "")
+							.trim()
+							.toLowerCase() === value.toLowerCase(),
 				)
 			) {
 				return s;
@@ -178,6 +299,103 @@ export default function AddPersonModal({
 				} as Socials,
 			};
 		});
+	};
+
+	const runAiFill = async () => {
+		const source = aiPrompt.trim();
+		if (!source || !hasApiKey) return;
+
+		setAiLoading(true);
+		setAiError(false);
+		setAiResult("Parsing...");
+
+		try {
+			const payload = {
+				contents: [
+					{
+						role: "user",
+						parts: [
+							{
+								text: `${ADD_PERSON_AI_PROMPT}\n\nUser input:\n${source}`,
+							},
+						],
+					},
+				],
+				generationConfig: {
+					temperature: 0.05,
+					responseMimeType: "application/json",
+				},
+			};
+
+			const data = await callGemini(apiKey!.trim(), payload);
+			const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+			const parsed = JSON.parse(unwrapJson(rawText)) as AiPersonDraft;
+
+			setForm((prev) => {
+				const mergedSocials: Socials = {
+					instagram: uniqueStrings([
+						...(prev.socials.instagram ?? []),
+						...(parsed.socials?.instagram ?? []).map(cleanString),
+					]),
+					linkedin: uniqueStrings([
+						...(prev.socials.linkedin ?? []),
+						...(parsed.socials?.linkedin ?? []).map(cleanString),
+					]),
+					twitter: uniqueStrings([
+						...(prev.socials.twitter ?? []),
+						...(parsed.socials?.twitter ?? []).map(cleanString),
+					]),
+					github: uniqueStrings([
+						...(prev.socials.github ?? []),
+						...(parsed.socials?.github ?? []).map(cleanString),
+					]),
+					mastodon: uniqueStrings([
+						...(prev.socials.mastodon ?? []),
+						...(parsed.socials?.mastodon ?? []).map(cleanString),
+					]),
+					website: uniqueStrings([
+						...(prev.socials.website ?? []),
+						...(parsed.socials?.website ?? []).map(cleanString),
+					]),
+				};
+
+				const existingTags = parseCommaSeparatedTags(prev.inrete);
+				const incomingTags = Array.isArray(parsed.tags)
+					? parsed.tags.map(cleanString).filter(Boolean)
+					: [];
+
+				return {
+					...prev,
+					name: cleanString(parsed.name) || prev.name,
+					year:
+						typeof parsed.year === "number" && Number.isFinite(parsed.year)
+							? parsed.year
+							: prev.year,
+					description: cleanString(parsed.description) || prev.description,
+					firstInteraction:
+						cleanString(parsed.firstInteraction) || prev.firstInteraction,
+					lastInteraction:
+						cleanString(parsed.lastInteraction) || prev.lastInteraction,
+					lore: cleanString(parsed.lore) || prev.lore,
+					email: cleanString(parsed.email) || prev.email,
+					phone: cleanString(parsed.phone) || prev.phone,
+					location: cleanString(parsed.location) || prev.location,
+					inrete:
+						incomingTags.length > 0
+							? uniqueStrings([...existingTags, ...incomingTags]).join(", ")
+							: prev.inrete,
+					socials: mergedSocials,
+				};
+			});
+
+			setAiResult("Filled form from AI.");
+			setAiError(false);
+		} catch (error) {
+			setAiError(true);
+			setAiResult(error instanceof Error ? error.message : "AI fill failed.");
+		} finally {
+			setAiLoading(false);
+		}
 	};
 
 	if (!isOpen) return null;
@@ -305,6 +523,48 @@ export default function AddPersonModal({
 					opacity: 0.45;
 					cursor: not-allowed;
 				}
+				.rm-ai-box {
+					border: 1px solid var(--border);
+					border-radius: 10px;
+					padding: 12px;
+					background: rgba(255,255,255,0.02);
+				}
+				.rm-ai-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 8px;
+					margin-bottom: 8px;
+				}
+				.rm-ai-title {
+					font-size: 11px;
+					font-weight: 700;
+					letter-spacing: 0.06em;
+					text-transform: uppercase;
+					color: var(--text);
+				}
+				.rm-ai-sub {
+					font-size: 11px;
+					color: var(--text);
+					opacity: 0.7;
+				}
+				.rm-ai-actions {
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					margin-top: 8px;
+					flex-wrap: wrap;
+				}
+				.rm-ai-status {
+					font-size: 11px;
+					color: var(--text);
+				}
+				.rm-ai-status.error {
+					color: #fca5a5;
+				}
+				.rm-ai-status.ok {
+					color: #86efac;
+				}
 				@media (max-width: 640px) {
 					.rm-row { grid-template-columns: 1fr; }
 					.rm-modal { max-height: 95vh; }
@@ -328,11 +588,50 @@ export default function AddPersonModal({
 						</div>
 						<div className="rm-steps">
 							<div className="rm-step active" />
-							<div className={`rm-step ${step === "contact" ? "active" : ""}`} />
+							<div
+								className={`rm-step ${step === "contact" ? "active" : ""}`}
+							/>
 						</div>
 					</div>
 
 					<div className="rm-modal-body">
+						<div className="rm-ai-box">
+							<div className="rm-ai-header">
+								<div className="rm-ai-title">AI fill</div>
+								<div className="rm-ai-sub">Optional</div>
+							</div>
+
+							<textarea
+								className="rm-input"
+								rows={3}
+								placeholder='Example: "there is this person I met at a concert in 2019, we talked about music and movies, we follow each other on Instagram but I forgot their handle…"'
+								value={aiPrompt}
+								onChange={(e) => setAiPrompt(e.target.value)}
+							/>
+
+							<div className="rm-ai-actions">
+								<button
+									type="button"
+									className="rm-btn-next"
+									onClick={() => void runAiFill()}
+									disabled={aiLoading || !aiPrompt.trim() || !hasApiKey}>
+									{aiLoading ? "Parsing…" : "Fill form with AI"}
+								</button>
+
+								{!hasApiKey && (
+									<span className="rm-ai-status error">
+										Set VITE_GEMINI_API_KEY in .env.local
+									</span>
+								)}
+
+								{aiResult && (
+									<span className={`rm-ai-status ${aiError ? "error" : "ok"}`}>
+										{aiResult}
+									</span>
+								)}
+							</div>
+						</div>
+
 						{step === "basic" && (
 							<>
 								<FormField
@@ -381,6 +680,7 @@ export default function AddPersonModal({
 												firstInteraction: e.target.value,
 											}))
 										}
+										onKeyDown={handleKeyDown}
 									/>
 									<TextareaField
 										label="Last interaction"
@@ -394,6 +694,7 @@ export default function AddPersonModal({
 												lastInteraction: e.target.value,
 											}))
 										}
+										onKeyDown={handleKeyDown}
 									/>
 								</div>
 								<TextareaField
@@ -405,6 +706,7 @@ export default function AddPersonModal({
 									onChange={(e) =>
 										setForm((s) => ({ ...s, description: e.target.value }))
 									}
+									onKeyDown={handleKeyDown}
 								/>
 								<TextareaField
 									label="Lore"
@@ -415,6 +717,7 @@ export default function AddPersonModal({
 									onChange={(e) =>
 										setForm((s) => ({ ...s, lore: e.target.value }))
 									}
+									onKeyDown={handleKeyDown}
 								/>
 								<FormField
 									label="Tags"
