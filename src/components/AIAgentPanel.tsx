@@ -603,6 +603,8 @@ export default function AIAgentPanel() {
 				"- bulk_unlink_people_by_tag args shape: { tagName: string, type: string }",
 				"- Example: 'for every person with tag 1cp, create relationships with every other person with tag 1cp using type studied_together' => { action: 'bulk_link_people_by_tag', args: { tagName: '1cp', type: 'studied_together' } }",
 				"- Example: 'for every person with tag 1cp, remove relationships with every other person with tag 1cp using type studied_together' => { action: 'bulk_unlink_people_by_tag', args: { tagName: '1cp', type: 'studied_together' } }",
+				"- If the user asks to add a location tag, store it as a normal tag in args.patch.inrete.",
+				"- If the user asks to set a person's location, use args.patch.location.",
 			].join("\n");
 
 			const payload = {
@@ -668,7 +670,7 @@ ${userText}`,
 				setBatchReview({
 					message:
 						action.message ||
-						"Large input detected. Review matches and choose what to do.",
+						`I found ${matches.length} confirmed matches, ${possibleMatches.length} possible matches, and ${newPeople.length} new people. Review them below.`,
 					matches,
 					possibleMatches,
 					newPeople,
@@ -676,7 +678,7 @@ ${userText}`,
 				});
 				setResult(
 					action.message ||
-						`Review ready: ${matches.length} strong matches, ${possibleMatches.length} possible matches, ${newPeople.length} new people.`,
+						`Found ${matches.length} confirmed matches, ${possibleMatches.length} possible matches, and ${newPeople.length} new people to review.`,
 				);
 				setError(false);
 				return;
@@ -1151,37 +1153,148 @@ ${userText}`,
 
 			{batchReview && (
 				<div className="mt-3 rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-[12px] text-sky-100">
-					<div className="mb-2 font-semibold">Review needed</div>
-					<div className="mb-2">{batchReview.message}</div>
-					<div className="mb-2">
-						Strong matches: {batchReview.matches.length} | Possible matches:{" "}
-						{batchReview.possibleMatches.length} | New people:{" "}
-						{batchReview.newPeople.length}
+					<div className="mb-2 font-semibold">Review required</div>
+
+					<div className="mb-2 text-sky-50">
+						We found existing people, possible matches, and new people from this
+						import. Review the names below before creating or selecting
+						anything.
+					</div>
+
+					<div className="mb-3 grid gap-2 rounded-md border border-sky-400/20 bg-black/20 p-2 sm:grid-cols-3">
+						<div>
+							<div className="text-[11px] uppercase tracking-wide text-sky-200/70">
+								Confirmed
+							</div>
+							<div className="text-[15px] font-semibold">
+								{batchReview.matches.length}
+							</div>
+						</div>
+						<div>
+							<div className="text-[11px] uppercase tracking-wide text-sky-200/70">
+								Possible
+							</div>
+							<div className="text-[15px] font-semibold">
+								{batchReview.possibleMatches.length}
+							</div>
+						</div>
+						<div>
+							<div className="text-[11px] uppercase tracking-wide text-sky-200/70">
+								New people
+							</div>
+							<div className="text-[15px] font-semibold">
+								{batchReview.newPeople.length}
+							</div>
+						</div>
 					</div>
 
 					{batchReview.matches.length > 0 && (
-						<div className="mb-2">
-							<div className="mb-1 font-medium">Strong matches</div>
+						<div className="mb-3">
+							<div className="mb-1 font-medium">Confirmed matches</div>
 							<div className="space-y-1">
-								{batchReview.matches.slice(0, 5).map((item, idx) => (
-									<div key={`${item.input}-${idx}`}>
-										{item.input} → {item.personName || item.personId || "match"}
-									</div>
-								))}
+								{batchReview.matches.slice(0, 8).map((item, idx) => {
+									const sourceName =
+										item.input?.trim() ||
+										item.personName?.trim() ||
+										"Imported person";
+
+									const matchedName =
+										item.personName?.trim() ||
+										(item.personId
+											? `Saved person (${item.personId})`
+											: "Saved person");
+
+									return (
+										<div
+											key={`${item.input || item.personId || "match"}-${idx}`}
+											className="rounded border border-sky-400/15 bg-black/20 px-2 py-1">
+											<div className="font-medium text-sky-50">
+												{sourceName}
+											</div>
+											<div className="text-sky-200/80">
+												Matches with: {matchedName}
+											</div>
+											{item.reason && (
+												<div className="text-[11px] text-sky-200/60">
+													{item.reason}
+												</div>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						</div>
+					)}
+
+					{batchReview.possibleMatches.length > 0 && (
+						<div className="mb-3">
+							<div className="mb-1 font-medium">Possible matches</div>
+							<div className="space-y-1">
+								{batchReview.possibleMatches.slice(0, 8).map((item, idx) => {
+									const sourceName =
+										item.input?.trim() ||
+										item.personName?.trim() ||
+										"Imported person";
+
+									const candidateName =
+										item.personName?.trim() ||
+										(item.personId
+											? `Possible saved person (${item.personId})`
+											: "Possible saved person");
+
+									return (
+										<div
+											key={`${item.input || item.personId || "possible"}-${idx}`}
+											className="rounded border border-amber-400/15 bg-black/20 px-2 py-1">
+											<div className="font-medium text-sky-50">
+												{sourceName}
+											</div>
+											<div className="text-sky-200/80">
+												Could match: {candidateName}
+											</div>
+											{typeof item.confidence === "number" && (
+												<div className="text-[11px] text-sky-200/60">
+													Confidence: {Math.round(item.confidence * 100)}%
+												</div>
+											)}
+											{item.reason && (
+												<div className="text-[11px] text-sky-200/60">
+													{item.reason}
+												</div>
+											)}
+										</div>
+									);
+								})}
 							</div>
 						</div>
 					)}
 
 					{batchReview.newPeople.length > 0 && (
-						<div className="mb-2">
-							<div className="mb-1 font-medium">New people candidates</div>
+						<div className="mb-3">
+							<div className="mb-1 font-medium">New people to create</div>
 							<div className="space-y-1">
-								{batchReview.newPeople.slice(0, 5).map((item, idx) => (
-									<div key={`${item.name || "new"}-${idx}`}>
-										{item.name || "Unnamed"}{" "}
-										{item.instagram ? `(${item.instagram})` : ""}
-									</div>
-								))}
+								{batchReview.newPeople.slice(0, 8).map((item, idx) => {
+									const displayName = item.name?.trim() || "Unnamed person";
+									const secondary =
+										item.instagram?.trim() ||
+										item.tiktok?.trim() ||
+										item.facebook?.trim() ||
+										item.email?.trim() ||
+										"";
+
+									return (
+										<div
+											key={`${item.name || "new"}-${idx}`}
+											className="rounded border border-emerald-400/15 bg-black/20 px-2 py-1">
+											<div className="font-medium text-sky-50">
+												{displayName}
+											</div>
+											{secondary && (
+												<div className="text-sky-200/80">{secondary}</div>
+											)}
+										</div>
+									);
+								})}
 							</div>
 						</div>
 					)}
@@ -1194,18 +1307,20 @@ ${userText}`,
 							disabled={running || batchReview.newPeople.length === 0}>
 							Create all new people
 						</button>
+
 						<button
 							type="button"
 							className="rm-sidebar-btn"
 							onClick={handleSelectFirstMatch}
 							disabled={batchReview.matches.length === 0}>
-							Select first strong match
+							Select first confirmed match
 						</button>
+
 						<button
 							type="button"
 							className="rm-sidebar-btn"
 							onClick={() => setBatchReview(null)}>
-							Clear review
+							Dismiss review
 						</button>
 					</div>
 				</div>
