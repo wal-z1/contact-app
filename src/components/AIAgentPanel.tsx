@@ -98,6 +98,22 @@ type AgentAction =
 			action: "none";
 			args?: Record<string, unknown>;
 			message?: string;
+	  }
+	| {
+			action: "bulk_link_people_by_tag";
+			args: {
+				tagName?: string;
+				type?: string;
+			};
+			message?: string;
+	  }
+	| {
+			action: "bulk_unlink_people_by_tag";
+			args: {
+				tagName?: string;
+				type?: string;
+			};
+			message?: string;
 	  };
 
 const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
@@ -310,8 +326,7 @@ function looksLikeLargeBatchInput(text: string): boolean {
 		.filter(Boolean);
 
 	const hasManyLines = lines.length >= 8;
-	const hasManyHandles =
-		(source.match(/@[a-z0-9._-]+/gi) ?? []).length >= 6;
+	const hasManyHandles = (source.match(/@[a-z0-9._-]+/gi) ?? []).length >= 6;
 	const hasManyUrls = extractUrls(source).length >= 5;
 	const hasBulkWords =
 		/\b(followers|following|import|list|batch|paste|pasted|csv|usernames?)\b/i.test(
@@ -558,7 +573,10 @@ export default function AIAgentPanel() {
 			const systemPrompt = [
 				"You are a contact-app command planner.",
 				"Return strict JSON only.",
-				"Schema: { action: 'create_person'|'update_person'|'bulk_update_people'|'review_people_batch'|'select_person'|'link_people'|'none', args: object, message?: string }",
+				"Schema: { action: 'create_person'|'update_person'|'bulk_update_people'|'bulk_link_people_by_tag'|'bulk_unlink_people_by_tag'|'review_people_batch'|'select_person'|'link_people'|'none', args: object, message?: string }",
+				"- If the user asks to connect all people sharing a tag, use action='bulk_link_people_by_tag'.",
+				"- bulk_link_people_by_tag args shape: { tagName: string, type: string }",
+				"- Example: 'for every person with tag 1cp, create relationships with every other person with tag 1cp using type studied_together' => { action: 'bulk_link_people_by_tag', args: { tagName: '1cp', type: 'studied_together' } }",
 				"Rules:",
 				"- Prefer 'none' when request is ambiguous.",
 				"- For update/select/link, use person names from provided people list.",
@@ -579,6 +597,12 @@ export default function AIAgentPanel() {
 				"- If the user asks to update all people with a given tag, return { action: 'bulk_update_people', args: { tagName: string, patch: {...} } }.",
 				"- If the user says known from year/years should become 2024, map that to patch.year = 2024.",
 				"- If input looks like a large list, do review_people_batch even if some matches are obvious.",
+				"- If the user asks to connect all people sharing a tag, use action='bulk_link_people_by_tag'.",
+				"- If the user asks to remove relationships between all people sharing a tag, use action='bulk_unlink_people_by_tag'.",
+				"- bulk_link_people_by_tag args shape: { tagName: string, type: string }",
+				"- bulk_unlink_people_by_tag args shape: { tagName: string, type: string }",
+				"- Example: 'for every person with tag 1cp, create relationships with every other person with tag 1cp using type studied_together' => { action: 'bulk_link_people_by_tag', args: { tagName: '1cp', type: 'studied_together' } }",
+				"- Example: 'for every person with tag 1cp, remove relationships with every other person with tag 1cp using type studied_together' => { action: 'bulk_unlink_people_by_tag', args: { tagName: '1cp', type: 'studied_together' } }",
 			].join("\n");
 
 			const payload = {
@@ -754,7 +778,137 @@ ${userText}`,
 				setError(false);
 				return;
 			}
+			if (action.action === "bulk_unlink_people_by_tag") {
+				const tagName = sanitizeString(action.args?.tagName);
+				const type = sanitizeString(action.args?.type) || "related";
 
+				if (!tagName) {
+					throw new Error("Bulk unlink missing tag name.");
+				}
+
+				const normalized = normalizeTag(tagName);
+				const tag = tags.find(
+					(t) =>
+						normalizeTag(t.normalized || t.name) === normalized ||
+						normalizeTag(t.name) === normalized,
+				);
+
+				if (!tag) {
+					throw new Error(`Could not find tag "${tagName}".`);
+				}
+
+				const matchedPeople = people.filter((p) =>
+					Array.isArray(p.inrete) ? p.inrete.includes(tag.id) : false,
+				);
+
+				if (matchedPeople.length < 2) {
+					throw new Error(
+						`Need at least 2 people with tag "${tag.name}" to remove relationships.`,
+					);
+				}
+
+				let removed = 0;
+
+				for (let i = 0; i < matchedPeople.length; i++) {
+					for (let j = i + 1; j < matchedPeople.length; j++) {
+						const from = matchedPeople[i];
+						const to = matchedPeople[j];
+
+						const direct = await db.relationships
+							.where("from")
+							.equals(from.id)
+							.filter(
+								(r: any) =>
+									r.to === to.id && String(r.type ?? "").trim() === type,
+							)
+							.toArray();
+
+						const reverse = await db.relationships
+							.where("from")
+							.equals(to.id)
+							.filter(
+								(r: any) =>
+									r.to === from.id && String(r.type ?? "").trim() === type,
+							)
+							.toArray();
+
+						const idsToDelete = [...direct, ...reverse]
+							.map((r: any) => r.id)
+							.filter(Boolean);
+
+						if (idsToDelete.length > 0) {
+							await db.relationships.bulkDelete(idsToDelete);
+							removed += idsToDelete.length;
+						}
+					}
+				}
+
+				setResult(
+					action.message ||
+						`Removed ${removed} "${type}" relationships among ${matchedPeople.length} people with tag "${tag.name}".`,
+				);
+				setError(false);
+				return;
+			}
+			if (action.action === "bulk_link_people_by_tag") {
+				const tagName = sanitizeString(action.args?.tagName);
+				const type = sanitizeString(action.args?.type) || "related";
+
+				if (!tagName) {
+					throw new Error("Bulk link missing tag name.");
+				}
+
+				const normalized = normalizeTag(tagName);
+				const tag = tags.find(
+					(t) =>
+						normalizeTag(t.normalized || t.name) === normalized ||
+						normalizeTag(t.name) === normalized,
+				);
+
+				if (!tag) {
+					throw new Error(`Could not find tag "${tagName}".`);
+				}
+
+				const matchedPeople = people.filter((p) =>
+					Array.isArray(p.inrete) ? p.inrete.includes(tag.id) : false,
+				);
+
+				if (matchedPeople.length < 2) {
+					throw new Error(
+						`Need at least 2 people with tag "${tag.name}" to create relationships.`,
+					);
+				}
+
+				let created = 0;
+
+				for (let i = 0; i < matchedPeople.length; i++) {
+					for (let j = i + 1; j < matchedPeople.length; j++) {
+						const from = matchedPeople[i];
+						const to = matchedPeople[j];
+
+						const existing = await db.relationships
+							.where("from")
+							.equals(from.id)
+							.filter(
+								(r: any) =>
+									r.to === to.id && String(r.type ?? "").trim() === type,
+							)
+							.first();
+
+						if (existing) continue;
+
+						await createRelationship(from.id, to.id, type);
+						created += 1;
+					}
+				}
+
+				setResult(
+					action.message ||
+						`Created ${created} "${type}" relationships between ${matchedPeople.length} people with tag "${tag.name}".`,
+				);
+				setError(false);
+				return;
+			}
 			if (
 				action.action === "update_person" ||
 				directTag ||
@@ -958,8 +1112,8 @@ ${userText}`,
 
 			<div className="mb-2 text-[12px] text-[color:var(--rm-text-muted)]">
 				Examples: "add tag saying nice to this person", "add these socials:
-				https://...", "all ppl that have 1cp tag should update their known
-				from years to 2024", or paste a big follower list for review.
+				https://...", "all ppl that have 1cp tag should update their known from
+				years to 2024", or paste a big follower list for review.
 			</div>
 
 			{selectedPerson && (
