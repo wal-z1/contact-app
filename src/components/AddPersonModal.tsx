@@ -42,7 +42,10 @@ type AddPersonModalProps = {
 	onClose: () => void;
 };
 
-export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
+export default function AddPersonModal({
+	isOpen,
+	onClose,
+}: AddPersonModalProps) {
 	const activeYear = useAppStore((s) => s.activeYear);
 	const createPerson = useAppStore((s) => s.createPerson);
 	const [loading, setLoading] = useState(false);
@@ -72,12 +75,11 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 			github: [],
 			mastodon: [],
 			website: [],
-		},
+		} as Socials,
 	});
 
 	const [form, setForm] = useState<FormState>(emptyForm);
 
-	// Reset form when modal opens
 	useEffect(() => {
 		if (isOpen) {
 			setForm(emptyForm());
@@ -86,25 +88,26 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 		}
 	}, [isOpen, initialYear]);
 
-	// Keyboard shortcuts
 	useEffect(() => {
 		if (!isOpen) return;
-		const onKeyDown = (event: KeyboardEvent) => {
+
+		const onKeyDown = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Escape") onClose();
 		};
-		window.addEventListener("keydown", onKeyDown as any);
-		return () => window.removeEventListener("keydown", onKeyDown as any);
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [isOpen, onClose]);
 
 	const handleCreate = async () => {
 		if (!form.name.trim()) return;
+
 		setLoading(true);
 		try {
 			await createPerson(form as PersonFormData);
 			onClose();
 		} catch (error) {
 			console.error("Failed to create person:", error);
-			// Optionally, show an error message to the user
 		} finally {
 			setLoading(false);
 		}
@@ -117,48 +120,26 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 		}
 	};
 
-	const normalizePlatform = (value: string) =>
-		String(value ?? "")
-			.trim()
-			.toLowerCase()
-			.replace(/\s+/g, "_");
-
-	const normalizeSocialValue = (platform: string, raw: string) => {
-		const value = String(raw ?? "").trim();
-		if (!value) return "";
-
-		if (platform === "website") {
-			if (/^https?:\/\//i.test(value)) return value;
-			if (/^[\w.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(value)) {
-				return `https://${value}`;
-			}
-			return value;
-		}
-
-		const withoutAt = value.replace(/^@/, "");
-		const withoutProtocol = withoutAt.replace(/^https?:\/\//i, "");
-		const withoutDomain = withoutProtocol.replace(
-			/^(?:[a-z0-9-]+\.)+[a-z]{2,}\//i,
-			"",
-		);
-		return withoutDomain.split(/[?#]/)[0].trim();
-	};
+	const cleanSocialPlatform = (value: string) => String(value ?? "").trim();
+	const cleanSocialValue = (raw: string) => String(raw ?? "").trim();
 
 	const handleSocialAdd = (platform: string, raw: string) => {
-		const key = normalizePlatform(platform);
-		const value = normalizeSocialValue(key, raw);
+		const key = cleanSocialPlatform(platform);
+		const value = cleanSocialValue(raw);
+
 		if (!key || !value) return;
 
 		setForm((s) => {
-			const existing = Array.isArray((s.socials as any)[key])
-				? ((s.socials as any)[key] as string[])
+			const currentSocials =
+				(s.socials as Record<string, string[] | undefined>) ?? {};
+			const existing = Array.isArray(currentSocials[key])
+				? [...currentSocials[key]!]
 				: [];
+
 			if (
 				existing.some(
 					(entry) =>
-						String(entry ?? "")
-							.trim()
-							.toLowerCase() === value.toLowerCase(),
+						String(entry ?? "").trim().toLowerCase() === value.toLowerCase(),
 				)
 			) {
 				return s;
@@ -167,7 +148,7 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 			return {
 				...s,
 				socials: {
-					...(s.socials as any),
+					...currentSocials,
 					[key]: [...existing, value],
 				} as Socials,
 			};
@@ -175,20 +156,24 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 	};
 
 	const handleSocialRemove = (platform: string, index: number) => {
-		const key = normalizePlatform(platform);
+		const key = cleanSocialPlatform(platform);
 		if (!key) return;
 
 		setForm((s) => {
-			const existing = Array.isArray((s.socials as any)[key])
-				? [...((s.socials as any)[key] as string[])]
+			const currentSocials =
+				(s.socials as Record<string, string[] | undefined>) ?? {};
+			const existing = Array.isArray(currentSocials[key])
+				? [...currentSocials[key]!]
 				: [];
+
 			if (index < 0 || index >= existing.length) return s;
+
 			existing.splice(index, 1);
 
 			return {
 				...s,
 				socials: {
-					...(s.socials as any),
+					...currentSocials,
 					[key]: existing,
 				} as Socials,
 			};
@@ -325,6 +310,7 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 					.rm-modal { max-height: 95vh; }
 				}
 			`}</style>
+
 			<div
 				className="rm-overlay"
 				onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -342,9 +328,7 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 						</div>
 						<div className="rm-steps">
 							<div className="rm-step active" />
-							<div
-								className={`rm-step ${step === "contact" ? "active" : ""}`}
-							/>
+							<div className={`rm-step ${step === "contact" ? "active" : ""}`} />
 						</div>
 					</div>
 

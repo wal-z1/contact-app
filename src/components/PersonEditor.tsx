@@ -19,7 +19,6 @@ import { sectionWrap } from "./PersonEditorParts/constants";
 import {
 	normalizeTag,
 	deriveLocationNames,
-	normalizeHandle,
 	coerceEvents,
 	coerceSocialArray,
 } from "./PersonEditorParts/utils";
@@ -95,7 +94,25 @@ export default function PersonEditor({ person }: { person: Person }) {
 	const commitPatch = useCallback(
 		(patch: Partial<Person>) => {
 			if (!selectedPersonId) return;
-			setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+
+			setDraft((prev) => {
+				if (!prev) return prev;
+
+				const next = {
+					...prev,
+					...patch,
+				};
+
+				if (patch.socials) {
+					(next as any).socials = {
+						...((prev as any).socials ?? {}),
+						...(patch.socials as any),
+					};
+				}
+
+				return next;
+			});
+
 			void updatePerson(selectedPersonId, patch);
 		},
 		[selectedPersonId, updatePerson],
@@ -105,7 +122,23 @@ export default function PersonEditor({ person }: { person: Person }) {
 		(key: string, patch: Partial<Person>, delay = 2000) => {
 			if (!selectedPersonId) return;
 
-			setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+			setDraft((prev) => {
+				if (!prev) return prev;
+
+				const next = {
+					...prev,
+					...patch,
+				};
+
+				if (patch.socials) {
+					(next as any).socials = {
+						...((prev as any).socials ?? {}),
+						...(patch.socials as any),
+					};
+				}
+
+				return next;
+			});
 
 			if (debounceTimers.current[key]) {
 				clearTimeout(debounceTimers.current[key]);
@@ -194,8 +227,18 @@ export default function PersonEditor({ person }: { person: Person }) {
 			new Set(rawTagIds.map(String).filter(Boolean)),
 		);
 
-		const makeSocialList = (raw: unknown): string[] =>
-			coerceSocialArray(raw).map(normalizeHandle).filter(Boolean);
+		const rawSocials =
+			typeof (person as any).socials === "object" && (person as any).socials
+				? ((person as any).socials as Record<string, unknown>)
+				: {};
+
+		const nextSocials: Record<string, string[]> = {};
+
+		for (const [platform, rawValue] of Object.entries(rawSocials)) {
+			nextSocials[platform] = coerceSocialArray(rawValue)
+				.map((entry) => String(entry ?? "").trim())
+				.filter(Boolean);
+		}
 
 		setDraft({
 			...person,
@@ -208,14 +251,7 @@ export default function PersonEditor({ person }: { person: Person }) {
 			lastInteraction: person.lastInteraction ?? "",
 			location: person.location ?? "",
 			inrete: normalizedTags,
-			socials: {
-				instagram: makeSocialList((person.socials as any)?.instagram),
-				linkedin: makeSocialList((person.socials as any)?.linkedin),
-				twitter: makeSocialList((person.socials as any)?.twitter),
-				github: makeSocialList((person.socials as any)?.github),
-				mastodon: makeSocialList((person.socials as any)?.mastodon),
-				website: makeSocialList((person.socials as any)?.website),
-			},
+			socials: nextSocials as any,
 			events: coerceEvents((person as any).events),
 		});
 	}, [person]);
@@ -543,46 +579,52 @@ export default function PersonEditor({ person }: { person: Person }) {
 						onSaveLocation={() => void handleSaveLocation()}
 						onRemoveLocation={() => void handleRemoveLocation()}
 						onAddSocial={(platform, raw) => {
-							const normalized =
-								platform === "website"
-									? (() => {
-											const value = String(raw ?? "").trim();
-											if (!value) return "";
-											if (/^https?:\/\//i.test(value)) return value;
-											if (/^[\w.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(value)) {
-												return `https://${value}`;
-											}
-											return value;
-										})()
-									: normalizeHandle(raw);
-							if (!normalized) return;
+							const key = String(platform ?? "").trim();
+							const value = String(raw ?? "").trim();
 
-							const existing = (draft.socials as any)?.[platform] ?? [];
+							if (!key || !value) return;
+
+							const currentSocials =
+								(draftRef.current?.socials as Record<string, string[]>) ?? {};
+							const existing = Array.isArray(currentSocials[key])
+								? currentSocials[key]
+								: [];
+
 							if (
 								existing.some(
 									(entry: string) =>
-										String(entry ?? "")
-											.trim()
-											.toLowerCase() === normalized.toLowerCase(),
+										String(entry ?? "").trim().toLowerCase() ===
+										value.toLowerCase(),
 								)
-							)
+							) {
 								return;
+							}
 
 							commitPatch({
 								socials: {
-									...(draft.socials as any),
-									[platform]: [...existing, normalized],
+									...currentSocials,
+									[key]: [...existing, value],
 								} as any,
 							});
 						}}
 						onRemoveSocial={(platform, index) => {
-							const existing = [...((draft.socials as any)?.[platform] ?? [])];
+							const key = String(platform ?? "").trim();
+							if (!key) return;
+
+							const currentSocials =
+								(draftRef.current?.socials as Record<string, string[]>) ?? {};
+							const existing = Array.isArray(currentSocials[key])
+								? [...currentSocials[key]]
+								: [];
+
+							if (index < 0 || index >= existing.length) return;
+
 							existing.splice(index, 1);
 
 							commitPatch({
 								socials: {
-									...(draft.socials as any),
-									[platform]: existing,
+									...currentSocials,
+									[key]: existing,
 								} as any,
 							});
 						}}

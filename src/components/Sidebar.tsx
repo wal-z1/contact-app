@@ -7,7 +7,7 @@ import type { Person } from "../models/types";
 
 import { PeopleList } from "./PeopleList";
 import { DataManagement } from "./DataManagement";
-import { AddPersonModal } from "./AddPersonModal";
+import AddPersonModal from "./AddPersonModal";
 import AIAgentPanel from "./AIAgentPanel";
 
 const SidebarHeader = memo(function SidebarHeader({
