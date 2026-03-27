@@ -105,6 +105,41 @@ const normalizeTag = (value: string) =>
 		.toLowerCase()
 		.replace(/\s+/g, "_");
 
+const deriveLocationNames = (location: string) => {
+	const output: string[] = [];
+	const raw = String(location ?? "").trim();
+	if (!raw) return output;
+
+	const parts = raw
+		.split(",")
+		.map((part) => part.trim())
+		.filter(Boolean);
+
+	let country: string | undefined;
+	let state: string | undefined;
+
+	if (parts.length >= 3) {
+		country = parts[parts.length - 1];
+		state = parts[parts.length - 2];
+	} else if (parts.length === 2) {
+		const a = parts[0];
+		const b = parts[1];
+		if (/^[A-Za-z]{2,3}$/.test(b)) {
+			state = b;
+			country = "USA";
+		} else {
+			country = b;
+			state = a;
+		}
+	} else {
+		country = parts[0];
+	}
+
+	if (country) output.push(country);
+	if (country && state) output.push(`${country}:${state}`);
+	return output;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
@@ -354,6 +389,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 		const activeYear = get().activeYear;
 		const initialYear =
 			typeof activeYear === "number" ? activeYear : new Date().getFullYear();
+		const trimmedLocation = String(formData.location ?? "").trim();
 
 		const requestedTags = formData.inrete
 			.split(",")
@@ -383,6 +419,29 @@ export const useAppStore = create<AppState>((set, get) => ({
 			tagIds.push(id);
 		}
 
+		for (const locationTagName of deriveLocationNames(trimmedLocation)) {
+			const normalized = normalizeTag(locationTagName);
+			const found = existingTags.find(
+				(t) => (t.normalized ?? normalizeTag(t.name)) === normalized,
+			);
+
+			if (found) {
+				tagIds.push(found.id);
+				continue;
+			}
+
+			const id = nanoid();
+			try {
+				await db.tags.add({ id, name: locationTagName, normalized });
+				existingTags.push({ id, name: locationTagName, normalized });
+			} catch {
+				// ignore duplicate write race
+			}
+			tagIds.push(id);
+		}
+
+		const uniqueTagIds = Array.from(new Set(tagIds));
+
 		const personPayload: Omit<Person, "id"> = {
 			name: formData.name.trim(),
 			year: Number(formData.year) || initialYear,
@@ -392,9 +451,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 			lore: formData.lore.trim(),
 			email: formData.email.trim(),
 			phone: formData.phone.trim(),
-			location: (formData.location ?? "").trim(),
+			location: trimmedLocation,
 			socials: formData.socials,
-			inrete: tagIds,
+			inrete: uniqueTagIds,
 			nodeColor: DEFAULT_NODE_COLOR,
 			events: [],
 		};

@@ -123,16 +123,46 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 			.toLowerCase()
 			.replace(/\s+/g, "_");
 
+	const normalizeSocialValue = (platform: string, raw: string) => {
+		const value = String(raw ?? "").trim();
+		if (!value) return "";
+
+		if (platform === "website") {
+			if (/^https?:\/\//i.test(value)) return value;
+			if (/^[\w.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(value)) {
+				return `https://${value}`;
+			}
+			return value;
+		}
+
+		const withoutAt = value.replace(/^@/, "");
+		const withoutProtocol = withoutAt.replace(/^https?:\/\//i, "");
+		const withoutDomain = withoutProtocol.replace(
+			/^(?:[a-z0-9-]+\.)+[a-z]{2,}\//i,
+			"",
+		);
+		return withoutDomain.split(/[?#]/)[0].trim();
+	};
+
 	const handleSocialAdd = (platform: string, raw: string) => {
 		const key = normalizePlatform(platform);
-		const value = String(raw ?? "").trim();
+		const value = normalizeSocialValue(key, raw);
 		if (!key || !value) return;
 
 		setForm((s) => {
 			const existing = Array.isArray((s.socials as any)[key])
 				? ((s.socials as any)[key] as string[])
 				: [];
-			if (existing.includes(value)) return s;
+			if (
+				existing.some(
+					(entry) =>
+						String(entry ?? "")
+							.trim()
+							.toLowerCase() === value.toLowerCase(),
+				)
+			) {
+				return s;
+			}
 
 			return {
 				...s,

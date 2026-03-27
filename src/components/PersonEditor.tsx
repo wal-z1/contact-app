@@ -543,11 +543,30 @@ export default function PersonEditor({ person }: { person: Person }) {
 						onSaveLocation={() => void handleSaveLocation()}
 						onRemoveLocation={() => void handleRemoveLocation()}
 						onAddSocial={(platform, raw) => {
-							const normalized = normalizeHandle(raw);
+							const normalized =
+								platform === "website"
+									? (() => {
+											const value = String(raw ?? "").trim();
+											if (!value) return "";
+											if (/^https?:\/\//i.test(value)) return value;
+											if (/^[\w.-]+\.[a-z]{2,}(?:\/.*)?$/i.test(value)) {
+												return `https://${value}`;
+											}
+											return value;
+										})()
+									: normalizeHandle(raw);
 							if (!normalized) return;
 
 							const existing = (draft.socials as any)?.[platform] ?? [];
-							if (existing.includes(normalized)) return;
+							if (
+								existing.some(
+									(entry: string) =>
+										String(entry ?? "")
+											.trim()
+											.toLowerCase() === normalized.toLowerCase(),
+								)
+							)
+								return;
 
 							commitPatch({
 								socials: {
