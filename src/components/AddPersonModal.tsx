@@ -303,178 +303,184 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
 					aria-modal="true"
 					aria-labelledby="rm-add-person-title"
 					className="rm-modal">
-				<div className="rm-modal-header">
-					<div id="rm-add-person-title" className="rm-modal-title">
-						Add person
+					<div className="rm-modal-header">
+						<div id="rm-add-person-title" className="rm-modal-title">
+							Add person
+						</div>
+						<div className="rm-modal-sub">
+							{step === "basic" ? "Basic info" : "Contact & socials (optional)"}
+						</div>
+						<div className="rm-steps">
+							<div className="rm-step active" />
+							<div
+								className={`rm-step ${step === "contact" ? "active" : ""}`}
+							/>
+						</div>
 					</div>
-					<div className="rm-modal-sub">
-						{step === "basic" ? "Basic info" : "Contact & socials (optional)"}
-					</div>
-					<div className="rm-steps">
-						<div className="rm-step active" />
-						<div className={`rm-step ${step === "contact" ? "active" : ""}`} />
-					</div>
-				</div>
 
-				<div className="rm-modal-body">
-					{step === "basic" && (
-						<>
-							<FormField
-								label="Name"
-								id="name"
-								placeholder="Full name"
-								value={form.name}
-								onChange={(e) =>
-									setForm((s) => ({ ...s, name: e.target.value }))
-								}
-								onKeyDown={handleKeyDown}
-							/>
-							<div className="rm-row">
+					<div className="rm-modal-body">
+						{step === "basic" && (
+							<>
 								<FormField
-									label="Year met"
-									id="year"
-									type="number"
-									value={form.year}
+									label="Name"
+									id="name"
+									placeholder="Full name"
+									value={form.name}
 									onChange={(e) =>
-										setForm((s) => ({
-											...s,
-											year: Number(e.target.value || initialYear),
-										}))
+										setForm((s) => ({ ...s, name: e.target.value }))
 									}
+									onKeyDown={handleKeyDown}
 								/>
-								<FormField
-									label="Location"
-									id="location"
-									placeholder="City, Country"
-									value={form.location}
-									onChange={(e) =>
-										setForm((s) => ({ ...s, location: e.target.value }))
-									}
-								/>
-							</div>
-							<div className="rm-row">
-								<TextareaField
-									label="First interaction"
-									id="firstInteraction"
-									rows={2}
-									placeholder="How you first met..."
-									value={form.firstInteraction}
-									onChange={(e) =>
-										setForm((s) => ({
-											...s,
-											firstInteraction: e.target.value,
-										}))
-									}
-								/>
-								<TextareaField
-									label="Last interaction"
-									id="lastInteraction"
-									rows={2}
-									placeholder="Most recent interaction..."
-									value={form.lastInteraction}
-									onChange={(e) =>
-										setForm((s) => ({ ...s, lastInteraction: e.target.value }))
-									}
-								/>
-							</div>
-							<TextareaField
-								label="Description"
-								id="description"
-								rows={2}
-								placeholder="Short note about this person…"
-								value={form.description}
-								onChange={(e) =>
-									setForm((s) => ({ ...s, description: e.target.value }))
-								}
-							/>
-							<TextareaField
-								label="Lore"
-								id="lore"
-								rows={3}
-								placeholder="Longer backstory, context, memories…"
-								value={form.lore}
-								onChange={(e) =>
-									setForm((s) => ({ ...s, lore: e.target.value }))
-								}
-							/>
-							<FormField
-								label="Tags"
-								id="inrete"
-								placeholder="music, school, work (comma separated)"
-								value={form.inrete}
-								onChange={(e) =>
-									setForm((s) => ({ ...s, inrete: e.target.value }))
-								}
-							/>
-						</>
-					)}
-
-					{step === "contact" && (
-						<>
-							<div className="rm-row">
-								<FormField
-									label="Phone"
-									id="phone"
-									placeholder="+1 555 000 0000"
-									autoComplete="tel"
-									value={form.phone}
-									onChange={(e) =>
-										setForm((s) => ({ ...s, phone: e.target.value }))
-									}
-								/>
-								<FormField
-									label="Email"
-									id="email"
-									placeholder="name@example.com"
-									autoComplete="email"
-									value={form.email}
-									onChange={(e) =>
-										setForm((s) => ({ ...s, email: e.target.value }))
-									}
-								/>
-							</div>
-
-							<div>
-								<div className="rm-section-label">Social handles</div>
-								<div style={{ marginTop: 12 }}>
-									<SocialHandles
-										socials={form.socials as Partial<Record<string, string[]>>}
-										onAdd={handleSocialAdd}
-										onRemove={handleSocialRemove}
+								<div className="rm-row">
+									<FormField
+										label="Year met"
+										id="year"
+										type="number"
+										value={form.year}
+										onChange={(e) =>
+											setForm((s) => ({
+												...s,
+												year: Number(e.target.value || initialYear),
+											}))
+										}
+									/>
+									<FormField
+										label="Location"
+										id="location"
+										placeholder="City, Country"
+										value={form.location}
+										onChange={(e) =>
+											setForm((s) => ({ ...s, location: e.target.value }))
+										}
 									/>
 								</div>
-							</div>
-						</>
-					)}
-				</div>
+								<div className="rm-row">
+									<TextareaField
+										label="First interaction"
+										id="firstInteraction"
+										rows={2}
+										placeholder="How you first met..."
+										value={form.firstInteraction}
+										onChange={(e) =>
+											setForm((s) => ({
+												...s,
+												firstInteraction: e.target.value,
+											}))
+										}
+									/>
+									<TextareaField
+										label="Last interaction"
+										id="lastInteraction"
+										rows={2}
+										placeholder="Most recent interaction..."
+										value={form.lastInteraction}
+										onChange={(e) =>
+											setForm((s) => ({
+												...s,
+												lastInteraction: e.target.value,
+											}))
+										}
+									/>
+								</div>
+								<TextareaField
+									label="Description"
+									id="description"
+									rows={2}
+									placeholder="Short note about this person…"
+									value={form.description}
+									onChange={(e) =>
+										setForm((s) => ({ ...s, description: e.target.value }))
+									}
+								/>
+								<TextareaField
+									label="Lore"
+									id="lore"
+									rows={3}
+									placeholder="Longer backstory, context, memories…"
+									value={form.lore}
+									onChange={(e) =>
+										setForm((s) => ({ ...s, lore: e.target.value }))
+									}
+								/>
+								<FormField
+									label="Tags"
+									id="inrete"
+									placeholder="music, school, work (comma separated)"
+									value={form.inrete}
+									onChange={(e) =>
+										setForm((s) => ({ ...s, inrete: e.target.value }))
+									}
+								/>
+							</>
+						)}
 
-				<div className="rm-modal-footer">
-					<button
-						onClick={step === "basic" ? onClose : () => setStep("basic")}
-						className="rm-btn-ghost">
-						{step === "basic" ? "Cancel" : "← Back"}
-					</button>
+						{step === "contact" && (
+							<>
+								<div className="rm-row">
+									<FormField
+										label="Phone"
+										id="phone"
+										placeholder="+1 555 000 0000"
+										autoComplete="tel"
+										value={form.phone}
+										onChange={(e) =>
+											setForm((s) => ({ ...s, phone: e.target.value }))
+										}
+									/>
+									<FormField
+										label="Email"
+										id="email"
+										placeholder="name@example.com"
+										autoComplete="email"
+										value={form.email}
+										onChange={(e) =>
+											setForm((s) => ({ ...s, email: e.target.value }))
+										}
+									/>
+								</div>
 
-					{step === "basic" ? (
+								<div>
+									<div className="rm-section-label">Social handles</div>
+									<div style={{ marginTop: 12 }}>
+										<SocialHandles
+											socials={
+												form.socials as Partial<Record<string, string[]>>
+											}
+											onAdd={handleSocialAdd}
+											onRemove={handleSocialRemove}
+										/>
+									</div>
+								</div>
+							</>
+						)}
+					</div>
+
+					<div className="rm-modal-footer">
 						<button
-							className="rm-btn-next"
-							disabled={!form.name.trim()}
-							onClick={() => setStep("contact")}>
-							Next →
+							onClick={step === "basic" ? onClose : () => setStep("basic")}
+							className="rm-btn-ghost">
+							{step === "basic" ? "Cancel" : "← Back"}
 						</button>
-					) : (
-						<button
-							className="rm-btn-primary"
-							disabled={loading || !form.name.trim()}
-							onClick={handleCreate}>
-							{loading ? "Creating…" : "Create person"}
-						</button>
-					)}
+
+						{step === "basic" ? (
+							<button
+								className="rm-btn-next"
+								disabled={!form.name.trim()}
+								onClick={() => setStep("contact")}>
+								Next →
+							</button>
+						) : (
+							<button
+								className="rm-btn-primary"
+								disabled={loading || !form.name.trim()}
+								onClick={handleCreate}>
+								{loading ? "Creating…" : "Create person"}
+							</button>
+						)}
+					</div>
 				</div>
 			</div>
-		</div>
-		</>
-		,
+		</>,
 		document.body,
 	);
 }
