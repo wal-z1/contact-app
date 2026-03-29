@@ -13,8 +13,11 @@ export default function StatsPanel() {
 	const [collapsed, setCollapsed] = useState(false);
 	const [sortKey, setSortKey] = useState<SortKey>("tags");
 	const [asc, setAsc] = useState(false);
+	const [openConnectorId, setOpenConnectorId] = useState<string | null>(null);
 
-	const snapshot = useLiveQuery(async () => {
+	const snapshot = useLiveQuery<Record<string, any>>(async (): Promise<
+		Record<string, any>
+	> => {
 		const people = (await db.people.toArray()) as Person[];
 		const rels = await db.relationships.toArray();
 		const tags = await db.tags.toArray();
@@ -214,6 +217,22 @@ export default function StatsPanel() {
 			.sort((a, b) => b.connectionCount - a.connectionCount)
 			.slice(0, 12);
 
+		// Build a plain object mapping person id -> list of connected people ({id,name,type})
+		const connectionsByPerson: Record<
+			string,
+			{ id: string; name: string; type?: string }[]
+		> = {};
+		for (const p of people) connectionsByPerson[p.id] = [];
+		for (const r of rels) {
+			const type = r.type || "unknown";
+			const fromName = people.find((x) => x.id === r.from)?.name || "(no name)";
+			const toName = people.find((x) => x.id === r.to)?.name || "(no name)";
+			if (!connectionsByPerson[r.from]) connectionsByPerson[r.from] = [];
+			if (!connectionsByPerson[r.to]) connectionsByPerson[r.to] = [];
+			connectionsByPerson[r.from].push({ id: r.to, name: toName, type });
+			connectionsByPerson[r.to].push({ id: r.from, name: fromName, type });
+		}
+
 		const topEvents = [...personStats]
 			.sort((a, b) => b.eventCount - a.eventCount)
 			.slice(0, 12)
@@ -277,6 +296,7 @@ export default function StatsPanel() {
 			unknownRelationshipTypes,
 			danglingRelationships,
 			bridgeCandidates,
+			connectionsByPerson,
 		};
 	}, []);
 
@@ -326,6 +346,7 @@ export default function StatsPanel() {
 		unknownRelationshipTypes,
 		danglingRelationships,
 		bridgeCandidates,
+		connectionsByPerson,
 	} = snapshot;
 
 	const maxTagCount = topTags[0]?.count ?? 1;
@@ -473,7 +494,7 @@ export default function StatsPanel() {
 								Potential Bridges
 							</div>
 							<div className="flex flex-col gap-1">
-								{bridgeCandidates.map((p) => (
+								{bridgeCandidates.map((p: any) => (
 									<div
 										key={p.id}
 										className="flex justify-between items-center gap-2">
@@ -526,7 +547,7 @@ export default function StatsPanel() {
 								Top tags
 							</div>
 							<div className="flex flex-col gap-1">
-								{topTags.map((t) => (
+								{topTags.map((t: any) => (
 									<div key={t.id} className="flex flex-col gap-[2px]">
 										<div className="flex justify-between items-baseline gap-1">
 											<span className="text-[12px] text-[color:var(--text)] truncate">
@@ -549,20 +570,57 @@ export default function StatsPanel() {
 
 						{/* Top connectors */}
 						<div>
-							<div className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)] opacity-50 mb-2">
-								Top connectors
+							<div className="flex items-center gap-2">
+								<div className="text-[11px] font-bold tracking-[0.08em] uppercase text-[color:var(--text)] opacity-50 mb-2">
+									Top connectors
+								</div>
+								{/* Small help indicator explaining the number shown (no logic or CSS changes) */}
+								<span
+									className="text-[11px] text-[#9ca3af] cursor-help mb-2"
+									title={
+										"Shown number = number of connections (relationships) this person has."
+									}
+									aria-label="Top connectors explanation">
+									?
+								</span>
 							</div>
 							<div className="flex flex-col gap-1">
-								{topConnectors.map((p) => (
-									<div
-										key={p.id}
-										className="flex justify-between items-center gap-2">
-										<span className="text-[12px] text-[color:var(--text)] truncate">
-											{p.name}
-										</span>
-										<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
-											{p.connectionCount}
-										</span>
+								{topConnectors.map((p: any) => (
+									<div key={p.id} className="relative">
+										<div
+											onClick={() =>
+												setOpenConnectorId((s) => (s === p.id ? null : p.id))
+											}
+											role="button"
+											aria-expanded={openConnectorId === p.id}
+											className="flex justify-between items-center gap-2 cursor-pointer select-none">
+											<span className="text-[12px] text-[color:var(--text)] truncate">
+												{p.name}
+											</span>
+											<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
+												{p.connectionCount}
+											</span>
+										</div>
+										{openConnectorId === p.id && (
+											<div className="mt-1 p-2 bg-white/3 rounded-md border border-[color:var(--border)] text-[11px] z-20">
+												{(connectionsByPerson?.[p.id] || []).length === 0 ? (
+													<div className="text-[#9ca3af]">No connections</div>
+												) : (
+													<div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+														{(connectionsByPerson[p.id] || []).map((c: any) => (
+															<div
+																key={c.id}
+																className="flex justify-between items-center gap-2">
+																<span className="truncate">{c.name}</span>
+																<span className="text-[#9ca3af] text-[11px]">
+																	{c.type}
+																</span>
+															</div>
+														))}
+													</div>
+												)}
+											</div>
+										)}
 									</div>
 								))}
 							</div>
@@ -575,7 +633,7 @@ export default function StatsPanel() {
 							</div>
 							<div className="flex flex-col gap-1">
 								{topEvents.length > 0 ? (
-									topEvents.map((p) => (
+									topEvents.map((p: any) => (
 										<div
 											key={p.id}
 											className="flex justify-between items-center gap-2">
@@ -603,18 +661,20 @@ export default function StatsPanel() {
 								Relationship types
 							</div>
 							<div className="flex flex-col gap-1">
-								{relationshipTypes.map(({ type, count }) => (
-									<div
-										key={type}
-										className="flex justify-between items-center gap-2">
-										<span className="text-[12px] text-[color:var(--text)] truncate">
-											{type}
-										</span>
-										<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
-											{count}
-										</span>
-									</div>
-								))}
+								{relationshipTypes.map(
+									({ type, count }: { type: string; count: number }) => (
+										<div
+											key={type}
+											className="flex justify-between items-center gap-2">
+											<span className="text-[12px] text-[color:var(--text)] truncate">
+												{type}
+											</span>
+											<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
+												{count}
+											</span>
+										</div>
+									),
+								)}
 								{relationshipTypes.length === 0 && (
 									<div className="text-[11px] text-[#4b5563]">
 										No relationships yet
@@ -627,18 +687,20 @@ export default function StatsPanel() {
 								Years distribution
 							</div>
 							<div className="flex flex-col gap-1">
-								{years.map(({ year, count }) => (
-									<div
-										key={year}
-										className="flex justify-between items-center gap-2">
-										<span className="text-[12px] text-[color:var(--text)] truncate">
-											{year}
-										</span>
-										<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
-											{count}
-										</span>
-									</div>
-								))}
+								{years.map(
+									({ year, count }: { year: number; count: number }) => (
+										<div
+											key={year}
+											className="flex justify-between items-center gap-2">
+											<span className="text-[12px] text-[color:var(--text)] truncate">
+												{year}
+											</span>
+											<span className="text-[11px] text-[#4b5563] bg-white/5 rounded-[10px] py-[1px] px-[7px] shrink-0">
+												{count}
+											</span>
+										</div>
+									),
+								)}
 								{years.length === 0 && (
 									<div className="text-[11px] text-[#4b5563]">No year data</div>
 								)}
